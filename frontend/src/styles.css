@@ -1,0 +1,198 @@
+/* Chatbot container */
+.chatbot-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+}
+.shuffle-button :hover{
+  background-color: #1DB954;
+}
+
+/* Chatbot toggle button */
+.chatbot-button {
+  background-color: #1e293b; /* Dark navy */
+  color: white;
+  border: none;
+  padding: 12px 15px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 24px;
+  transition:0.3s ease-in-out;
+}
+
+.chatbot-button:hover {
+  background-color: #374151; /* Slightly lighter shade */
+}
+
+/* Chatbot window */
+.chatbot {
+  width: 300px;
+  height: 400px;
+  background: #1e1e2e; /* Dark theme */
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+/* Messages container */
+.messages {
+  flex: 1;
+  padding: 15px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* User message */
+.user {
+  align-self: flex-end;
+  background: #2563eb; /* Blue */
+  color: white;
+  padding: 8px 12px;
+  border-radius: 15px;
+  max-width: 70%;
+}
+
+/* Bot message */
+.bot {
+  align-self: flex-start;
+  background: #4b5563; /* Grey */
+  color: white;
+  padding: 8px 12px;
+  border-radius: 15px;
+  max-width: 70%;
+}
+
+/* Input box */
+.chatbot input {
+  border: none;
+  padding: 10px;
+  width: 100%;
+  border-top: 1px solid #374151;
+  background: #2d2d3b;
+  color: white;
+  outline: none;
+}
+
+/* Send button */
+.chatbot button {
+  border: none;
+  background: #3b82f6; /* Initial Blue */
+  color: white;
+  padding: 10px 15px;
+  cursor: pointer;
+  transition:  2s ease-in-out; /* Ensure transition applies */
+}
+
+.chatbot button:hover {
+  background: #1e40af; /* Darker blue on hover */
+}
+
+/* Add to styles.css or component-specific CSS */
+.voice-assistant-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.05);
+  margin: 1rem 0;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pulse {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ccc;
+  position: relative;
+}
+
+.pulse.active {
+  background: #1DB954;
+  box-shadow: 0 0 0 0 rgba(29, 185, 84, 1);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(29, 185, 84, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(29, 185, 84, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(29, 185, 84, 0);
+  }
+}
+
+.listening-indicator {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: rgba(29, 185, 84, 0.1);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.transcript {
+  font-weight: bold;
+  margin-top: 0.5rem;
+}
+
+.playlist-created-notification {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #1DB954;
+  color: white;
+  border-radius: 8px;
+  text-align: center;
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* voice-assistant.css */
+.status-indicator {
+  padding: 0.5rem 1rem;
+  border-radius: 2rem;
+  background: #2a2a2a;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: opacity 0.2s;
+}
+
+.status-indicator.listening {
+  background: #1DB954;
+}
+
+
+.pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ffffff;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.9); opacity: 0.7; }
+  50% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(0.9); opacity: 0.7; }
+}
+
+.error {
+  color: #ff4444;
+  margin-top: 0.5rem;
+}
