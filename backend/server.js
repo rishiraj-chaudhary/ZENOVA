@@ -22,7 +22,13 @@ dotenv.config();
 const app = express();
 
 // Connect to MongoDB
-connectDB();
+connectDB().then(() => {
+  // Initialize badges after database is connected
+  console.log('Starting badge initialization...');
+  initializeDefaultBadges();
+}).catch(err => {
+  console.error('Database connection failed, skipping badge initialization');
+});
 
 const server=http.createServer(app);
 
