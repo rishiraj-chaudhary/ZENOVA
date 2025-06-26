@@ -1,5 +1,5 @@
 import Gamification from "../models/Gamification.js";
-import LeaderBoard from "../models/LeaderBoard.js";
+import LeaderBoard from "../models/Leaderboard.js";
 
 export const updateLeaderboard=async(type='alltime',period='all')=>{
     //Fetch all users anf their gamification stats
