@@ -55,6 +55,7 @@ const io = new Server(server, {
       const allowedOrigins = [
         'http://localhost:5173',
         'http://localhost:3000',
+        'https://6862e0d66e3cfca404b2bb65--enchanting-smakager-13714c.netlify.app'
         process.env.FRONTEND_URL,
       ];
       
