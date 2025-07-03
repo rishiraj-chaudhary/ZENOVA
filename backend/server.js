@@ -2,6 +2,8 @@ import cors from "cors";
 import dotenv from "dotenv";
 import express from "express";
 import "express-async-errors";
+import path from 'path';
+import { fileURLToPath } from 'url';
 import session from 'express-session';
 import http from 'http';
 import { Server } from 'socket.io';
@@ -19,47 +21,68 @@ import userRoutes from './routes/userRoutes.js';
 import SocketManager from "./services/socketManager.js";
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const app = express();
 
 // Connect to MongoDB
 connectDB().then(() => {
-  // Initialize badges after database is connected
+  console.log('Database connected successfully');
   console.log('Starting badge initialization...');
   initializeDefaultBadges();
 }).catch((err) => {
-  console.error('Database connection failed, skipping badge initialization');
+  console.error('Database connection failed:', err);
+  // Don't exit in production, but log the error
+  if (process.env.NODE_ENV !== 'production') {
+    process.exit(1);
+  }
 });
-const server=http.createServer(app);
 
-//session options
-const sessionOptions={
-  secret:'mysupersecretcode',
-  resave:false,
-  saveUninitialized:false
-}
-//Initializing badges database
-initializeDefaultBadges();
+const server = http.createServer(app);
+
+// Session options - use environment variable for secret
+const sessionOptions = {
+  secret: process.env.SESSION_SECRET || 'mysupersecretcode',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // HTTPS in production
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+};
 
 app.use(session(sessionOptions));
-// Middleware
+
+// CORS Configuration - Updated for Railway
 app.use(cors({
-  origin: 'http://localhost:5173', // Allow  Vite frontend
-  credentials: true // Important for cookies
+  origin: [
+    'http://localhost:5173',        // Vite dev server
+    'http://localhost:3000',        // Local backend
+    process.env.FRONTEND_URL,       // Railway production URL
+    /\.railway\.app$/               // Any Railway subdomain
+  ],
+  credentials: true
 }));
+
 app.use(express.json());
 
-//Initializing Socket.io with cors configuration
+// Socket.io with updated CORS - Fixed missing comma
 const io = new Server(server, {
   cors: {
     origin: function (origin, callback) {
       const allowedOrigins = [
         'http://localhost:5173',
         'http://localhost:3000',
-        'https://6862e0d66e3cfca404b2bb65--enchanting-smakager-13714c.netlify.app'
-        process.env.FRONTEND_URL,
+        'https://6862e0d66e3cfca404b2bb65--enchanting-smakager-13714c.netlify.app',
+        process.env.FRONTEND_URL // Fixed: Added missing comma above
       ];
       
-      if (!origin || allowedOrigins.includes(origin)) {
+      // Allow requests with no origin (mobile apps, etc.)
+      if (!origin) return callback(null, true);
+      
+      // Check if origin is allowed or matches Railway pattern
+      if (allowedOrigins.includes(origin) || /\.railway\.app$/.test(origin)) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS for WebSocket'));
@@ -69,26 +92,64 @@ const io = new Server(server, {
     credentials: true
   }
 });
-const socketManager= new SocketManager(io);
-// Routes
-app.get("/", (req, res) => {
-  res.send("Server is running...");
-});
-app.use((req,res,next)=>{
-  req.socketManager=socketManager;
-  req.io=io;
+
+const socketManager = new SocketManager(io);
+
+// Middleware to add socket manager to requests
+app.use((req, res, next) => {
+  req.socketManager = socketManager;
+  req.io = io;
   next();
 });
+
+// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/music/recommend', musicRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/gemini', geminiRoutes);
 app.use('/api/playlists', playlistRoutes);
-app.use('/api/gamification',gamificationRoutes);
-app.use('/api/leaderboard',leaderboardRoutes);
-// Global Error Handler
+app.use('/api/gamification', gamificationRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);
+
+// Health check endpoint
+app.get("/api/health", (req, res) => {
+  res.json({ 
+    status: "Server is running...", 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Serve static files from React build (ONLY in production)
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../frontend/dist')));
+  
+  // Catch all handler for React Router
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+      res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+    }
+  });
+} else {
+  // Development root route
+  app.get("/", (req, res) => {
+    res.json({ 
+      message: "ZENOVA Music Therapy Backend API", 
+      environment: "development",
+      frontend: "http://localhost:5173"
+    });
+  });
+}
+
+// Global Error Handler (must be last)
 app.use(errorHandler);
+
 const PORT = process.env.PORT || 3000;
-// app.listen(PORT, () => console.log(`Server running on PORT ${PORT}`));
-server.listen(PORT,()=> console.log(`Server running on port ${PORT}`));
+
+server.listen(PORT, () => {
+  console.log(` ZENOVA Server running on port ${PORT}`);
+  console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(` Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
+});
+
 export default app;
