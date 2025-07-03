@@ -1,0 +1,21 @@
+[variables]
+NODE_VERSION = "18"
+NPM_VERSION = "8"
+
+[phases.build]
+cmds = [
+  "echo 'Building ZENOVA Music Therapy Platform...'",
+  "echo 'Installing frontend dependencies...'",
+  "cd frontend && npm install",
+  "echo 'Building React frontend...'", 
+  "cd frontend && npm run build",
+  "echo 'Installing backend dependencies...'",
+  "cd backend && npm install",
+  "echo 'Build completed successfully!'"
+]
+
+[phases.start]
+cmd = "cd backend && npm start"
+
+[staticAssets]
+publicDir = "frontend/dist"
