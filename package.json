@@ -1,5 +1,19 @@
 {
-  "dependencies": {
-    "nodemailer": "^7.0.3"
-  }
+  "name": "zenova-full-stack",
+  "version": "1.0.0",
+  "description": "MENTAL HEALTH MUSIC RECOMMENDATION CHATBOT - AI-powered collaborative music therapy platform",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "start": "cd backend && npm start",
+    "dev": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm run dev",
+    "backend": "cd backend && npm run dev"
+  },
+  "workspaces": ["backend", "frontend"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rishiraj-chaudhary/ZENOVA.git"
+  },
+  "author": "RISHIRAJ",
+  "license": "MIT"
 }
