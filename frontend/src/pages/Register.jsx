@@ -89,7 +89,7 @@ const Register = () => {
     const handleRegister = async (event) => {
         event.preventDefault();
         try {
-            await axios.post('http://localhost:3000/api/auth/register', { name, email, password });
+            await axios.post('https://zenova-qfsf.onrender.com/api/auth/register', { name, email, password });
             navigate('/login');
         } catch (err) {
             if (err.response && err.response.data) {
