@@ -42,11 +42,22 @@ const STATIC_ALLOWED_ORIGINS = [
   "http://localhost:3000",
 ];
 
+/**
+ * Preview deployments get a generated subdomain per build, so the hosting
+ * platforms are matched by pattern rather than enumerated. The frontend is
+ * deployed on Vercel and the API on Render.
+ */
+const ALLOWED_HOST_PATTERNS = [
+  /\.vercel\.app$/,
+  /\.netlify\.app$/,
+  /\.railway\.app$/,
+  /\.onrender\.com$/,
+];
+
 const isAllowedOrigin = (origin) =>
   STATIC_ALLOWED_ORIGINS.includes(origin) ||
   origin === config.frontendUrl ||
-  /\.railway\.app$/.test(origin) ||
-  /\.netlify\.app$/.test(origin);
+  ALLOWED_HOST_PATTERNS.some((pattern) => pattern.test(origin));
 
 /**
  * Shared by the Express app and the Socket.IO server so both accept exactly the

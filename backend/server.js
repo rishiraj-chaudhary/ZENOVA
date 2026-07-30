@@ -59,7 +59,10 @@ app.use(
     }),
     cookie: {
       httpOnly: true,
-      sameSite: "lax",
+      // The frontend (Vercel) and API (Render) are on different origins in
+      // production, so the session cookie must be cross-site. Browsers only
+      // accept SameSite=None together with Secure.
+      sameSite: config.isProduction ? "none" : "lax",
       secure: config.isProduction,
       maxAge: config.session.maxAgeMs,
     },
