@@ -1,23 +1,48 @@
-import express from 'express';
-import { body } from 'express-validator'; //validate request body data
-import { checkAuth, login, register } from '../controllers/authController.js';
-import { trackDailyLogin } from '../middlewares/gamificationMiddleware.js';
+import express from "express";
+import { body } from "express-validator";
+import { authLimiter } from "../config/security.js";
+import {
+  checkAuth,
+  login,
+  logout,
+  register,
+  sendAuthPayload,
+} from "../controllers/authController.js";
+import protect from "../middlewares/authMiddleware.js";
+import { trackDailyLogin } from "../middlewares/gamificationMiddleware.js";
+import validateRequest from "../middlewares/validateRequest.js";
+
 const router = express.Router();
 
-// Register route
-router.post('/register', [
-    body('name').not().isEmpty().withMessage('Name is required'),
-    body('email').isEmail().withMessage('Enter valid email'),
-    body('password').isLength({ min: 6 }).withMessage('Password should be of length 6 or more'),
-], register);
+router.post(
+  "/register",
+  authLimiter,
+  [
+    body("name").isString().trim().notEmpty().withMessage("Name is required"),
+    body("email").isEmail().normalizeEmail().withMessage("Enter a valid email"),
+    body("password")
+      .isLength({ min: 6 })
+      .withMessage("Password should be 6 characters or more"),
+  ],
+  validateRequest,
+  register
+);
 
-// Login route
-router.post('/login', [
-    body('email').isEmail().withMessage('Enter valid email'),
-    body('password').not().isEmpty().withMessage('Password is required')
-],login, trackDailyLogin );
+router.post(
+  "/login",
+  authLimiter,
+  [
+    body("email").isEmail().normalizeEmail().withMessage("Enter a valid email"),
+    body("password").notEmpty().withMessage("Password is required"),
+  ],
+  validateRequest,
+  login,
+  trackDailyLogin,
+  sendAuthPayload
+);
 
-// Check session route
-router.get('/check-session', checkAuth,trackDailyLogin);
+router.get("/check-session", protect, checkAuth, trackDailyLogin, sendAuthPayload);
+
+router.post("/logout", logout);
 
 export default router;

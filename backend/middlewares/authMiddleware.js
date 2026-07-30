@@ -1,51 +1,56 @@
-import jwt from 'jsonwebtoken';
-import User from '../models/user.js';
+import jwt from "jsonwebtoken";
+import config from "../config/environment.js";
+import User from "../models/user.js";
+import AppError from "../utils/AppError.js";
+import asyncHandler from "../utils/asyncHandler.js";
 
-const protect = async (req, res, next) => {
-  let token;
-  
-  // First check for JWT in Authorization header
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    console.log('Auth header:', req.headers.authorization);
-    try {
-      // Get token from header
-      token = req.headers.authorization.split(' ')[1];
-      
-      // Verify token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      
-      // Set user in request
-      req.user = await User.findById(decoded.id).select('-password');
-      
-      if (!req.user) {
-        return res.status(401).json({ message: 'user not found' });
-      }
-      
-      return next();
-    } catch (error) {
-      console.error("JWT auth error:", error);
-      return res.status(401).json({ message: 'Not authorized, token invalid' });
-    }
-  }
-  
-  // Fall back to session auth if no JWT
-  if (req.session && req.session.user) {
-    try {
-      const sessionUser = await User.findById(req.session.user._id).select('-password');
-      if (!sessionUser) {
-        return res.status(401).json({ message: 'user not found' });
-      }
-      
-      req.user = sessionUser;
-      return next();
-    } catch (error) {
-      console.error("Session auth error:", error);
-      return res.status(401).json({ message: 'Not authorized' });
-    }
-  }
-  
-  // No authentication found
-  return res.status(401).json({ message: 'Not authorized, no authentication provided' });
+const extractBearerToken = (req) => {
+  const header = req.headers.authorization;
+  if (!header?.startsWith("Bearer ")) return null;
+  return header.slice("Bearer ".length).trim() || null;
 };
+
+/**
+ * Resolves the caller's id from either a Bearer JWT or an established session,
+ * in that order. Returns null when the request carries neither.
+ */
+const resolveUserId = (req) => {
+  const token = extractBearerToken(req);
+  if (token) return jwt.verify(token, config.jwt.secret).id;
+  return req.session?.user?._id ?? null;
+};
+
+/** Rejects the request unless it carries valid credentials. */
+const protect = asyncHandler(async (req, res, next) => {
+  const userId = resolveUserId(req);
+  if (!userId) {
+    throw AppError.unauthorized("Not authorized, no authentication provided");
+  }
+
+  const authenticatedUser = await User.findById(userId).select("-password");
+  if (!authenticatedUser) {
+    throw AppError.unauthorized("Not authorized, user no longer exists");
+  }
+
+  req.user = authenticatedUser;
+  next();
+});
+
+/**
+ * Populates req.user when credentials are present but never rejects. For
+ * endpoints that personalise their response for signed-in users yet stay
+ * usable for guests.
+ */
+export const attachUserIfPresent = asyncHandler(async (req, res, next) => {
+  try {
+    const userId = resolveUserId(req);
+    if (userId) {
+      req.user = await User.findById(userId).select("-password");
+    }
+  } catch {
+    // An invalid token on an optional-auth route just means "treat as guest".
+  }
+  next();
+});
 
 export default protect;

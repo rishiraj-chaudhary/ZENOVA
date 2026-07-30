@@ -1,191 +1,97 @@
-// import { useContext } from 'react';
-// import { BrowserRouter, Route, Routes } from 'react-router-dom';
-// import Navbar from "./components/Navbar";
-// import AuthContext, { AuthProvider } from './context/AuthContext';
-// import { SocketProvider } from './context/SocketContext';
-// import Home from "./pages/Home";
-// import InviteAccept from './pages/InviteAccept';
-// import Login from "./pages/Login";
-// import Playlist from "./pages/Playlist";
-// import Profile from "./pages/Profile";
-// import Register from "./pages/Register";
-// const AppContent = () => {
+import { Suspense, lazy } from "react";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import NotificationToast from "./components/Gamification/NotificationToast.jsx";
+import Navbar from "./components/Navbar.jsx";
+import Onboarding from "./components/Onboarding.jsx";
+import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
+import { GamificationProvider } from "./context/GamificationContext.jsx";
+import { SocketProvider } from "./context/SocketContext.jsx";
+import { SpotifyAuthProvider } from "./context/SpotifyAuthContext.jsx";
+import Home from "./pages/Home.jsx";
+import Login from "./pages/Login.jsx";
+import Register from "./pages/Register.jsx";
 
-//     const { currentPage } = useContext(AuthContext);
+/**
+ * Routes behind auth are lazily loaded: a signed-out visitor on the landing
+ * page should not download the playlist editor, the chat client or the charts.
+ */
+const Gamification = lazy(() => import("./pages/Gamification.jsx"));
+const Insights = lazy(() => import("./pages/Insights.jsx"));
+const InviteAccept = lazy(() => import("./pages/InviteAccept.jsx"));
+const Playlist = lazy(() => import("./pages/Playlist.jsx"));
+const Profile = lazy(() => import("./pages/Profile.jsx"));
+const Settings = lazy(() => import("./pages/Settings.jsx"));
+const SpotifyCallback = lazy(() => import("./components/SpotifyCallback.jsx"));
 
-//     let PageComponent;
-//     if (currentPage === "login") PageComponent = <Login />;
-//     else if (currentPage === "register") PageComponent = <Register />;
-//     else if (currentPage === "profile") PageComponent = <Profile />;
-//     else if (currentPage === "playlist") PageComponent = <Playlist />;
-//     else if (currentPage === "invite") PageComponent=<InviteAccept/>
-//     else PageComponent = <Home />;
+const FullPageMessage = ({ children }) => (
+  <div className="flex min-h-screen items-center justify-center text-gray-300">
+    {children}
+  </div>
+);
 
-//     return (
-//         <BrowserRouter>
-//             <div>
-//                 {currentPage !== 'home' && <Navbar/>}
-//                 <div className="pt-16"> {/* padding to offset fixed navbar */}
-//                     <Routes>
-//                         <Route path="/invite/:inviteCode" element={<InviteAccept />} />
-//                         <Route path="*" element={PageComponent} />
-//                     </Routes>
-//                 </div>
-//             </div>
-            
-//         </BrowserRouter>
-//     );
-// };
-
-
-// function App() {
-//     return (
-//         <AuthProvider>
-//             <SocketProvider>
-//                 <AppContent />
-//             </SocketProvider>
-//         </AuthProvider>
-//     );
-// }
-
-// export default App;
-
-// // <div>
-// //                 {currentPage!=='home' && <Navbar/>}
-// //                 <div className="pt-16"> {/* padding to offset fixed navbar */}
-// //                     {PageComponent}
-// //                 </div>
-// //             </div>
-
-// import { useContext } from 'react';
-// import { BrowserRouter, Route, Routes } from 'react-router-dom';
-// import Navbar from "./components/Navbar";
-// import AuthContext, { AuthProvider } from './context/AuthContext';
-// import { SocketProvider } from './context/SocketContext';
-// import Home from "./pages/Home";
-// import InviteAccept from './pages/InviteAccept';
-// import Login from "./pages/Login";
-// import Playlist from "./pages/Playlist";
-// import Profile from "./pages/Profile";
-// import Register from "./pages/Register";
-
-// const AppContent = () => {
-//     const { currentPage } = useContext(AuthContext);
-
-//     let PageComponent;
-//     if (currentPage === "login") PageComponent = <Login />;
-//     else if (currentPage === "register") PageComponent = <Register />;
-//     else if (currentPage === "profile") PageComponent = <Profile />;
-//     else if (currentPage === "playlist") PageComponent = <Playlist />;
-//     else if (currentPage === "invite") PageComponent = <InviteAccept />
-//     else PageComponent = <Home />;
-
-//     return (
-//         <BrowserRouter>
-//             <div>
-//                 {currentPage !== 'home' && <Navbar/>}
-//                 <div className="pt-16"> {/* padding to offset fixed navbar */}
-//                     <Routes>
-//                         <Route path="/invite/:inviteCode" element={<InviteAccept />} />
-//                         <Route path="*" element={PageComponent} />
-//                     </Routes>
-//                 </div>
-//             </div>
-//         </BrowserRouter>
-//     );
-// };
-
-// function App() {
-//     return (
-//         <AuthProvider>
-//             <SocketProvider>
-//                 <AppContent />
-//             </SocketProvider>
-//         </AuthProvider>
-//     );
-// }
-
-// export default App;
-
-
-
-
-import { useContext } from 'react';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import Navbar from "./components/Navbar";
-import SpotifyCallback from './components/SpotifyCallback';
-import AuthContext, { AuthProvider } from './context/AuthContext';
-// import { GamificationProvider } from './context/GamificationContext';
-import NotificationToast from './components/Gamification/NotificationToast';
-import { GamificationProvider } from './context/GamificationContext';
-import { SocketProvider } from './context/SocketContext';
-import { SpotifyAuthProvider } from './context/SpotifyAuthContext';
-import Gamification from './pages/Gamification';
-import Home from "./pages/Home";
-import InviteAccept from './pages/InviteAccept';
-import Login from "./pages/Login";
-import Playlist from "./pages/Playlist";
-import Profile from "./pages/Profile";
-import Register from "./pages/Register";
-const AppContent = () => {
-    const { user, loading } = useContext(AuthContext);
-
-    // Show loading indicator while checking authentication status
-    if (loading) {
-        return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
-    }
-
-    return (
-        <BrowserRouter>
-            {/* Only render Navbar when user is authenticated or on public routes */}
-            {(user || window.location.pathname === '/login' || window.location.pathname === '/register') && 
-                <Navbar />
-            }
-            {/* Global Real-Time notifications */}
-            <NotificationToast/>
-            
-            <div className={user || window.location.pathname === '/login' || window.location.pathname === '/register' ? "pt-16" : ""}>
-                <Routes>
-                    {/* Public routes */}
-                    <Route path="/" element={<Home />} />
-                    <Route path="/login" element={<Login />} />
-                    <Route path="/register" element={<Register />} />
-                    <Route path="/spotify-callback" element={<SpotifyCallback />} />
-                    <Route path="/invite/:inviteCode" element={<InviteAccept />} />
-                    <Route 
-                        path="/gamification" 
-                        element={user ? <Gamification /> : <Navigate to="/login" />} 
-                    />
-                    {/* Protected routes */}
-                    <Route 
-                        path="/profile" 
-                        element={user ? <Profile /> : <Navigate to="/login" />} 
-                    />
-                    <Route 
-                        path="/playlist" 
-                        element={user ? <Playlist /> : <Navigate to="/login" />} 
-                    />
-                    
-                    {/* Fallback route */}
-                    <Route path="*" element={<Navigate to="/" />} />
-                </Routes>
-            </div>
-        </BrowserRouter>
-    );
+const RequireAuth = ({ children }) => {
+  const { user } = useAuth();
+  return user ? children : <Navigate to="/login" replace />;
 };
 
-function App() {
-    return (
-       <AuthProvider>
-            <SpotifyAuthProvider>
-                <SocketProvider>
-                    <GamificationProvider>
-                        <AppContent />
-                    </GamificationProvider>
-                </SocketProvider>
-            </SpotifyAuthProvider>
-        </AuthProvider>
-    );
-}
+const AppRoutes = () => {
+  const { loading, needsOnboarding, completeOnboarding } = useAuth();
+
+  if (loading) return <FullPageMessage>Loading…</FullPageMessage>;
+
+  return (
+    <>
+      <Navbar />
+      <NotificationToast />
+
+      {/* Blocks the app until the intro is done, so nobody lands on a blank
+          chat and no mood is recorded before consent is given. */}
+      {needsOnboarding && <Onboarding onComplete={completeOnboarding} />}
+
+      <div className="pt-16">
+        <Suspense fallback={<FullPageMessage>Loading…</FullPageMessage>}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/spotify-callback" element={<SpotifyCallback />} />
+            <Route path="/invite/:inviteCode" element={<InviteAccept />} />
+
+            {[
+              ["/profile", <Profile />],
+              ["/playlist", <Playlist />],
+              ["/insights", <Insights />],
+              ["/gamification", <Gamification />],
+              ["/settings", <Settings />],
+            ].map(([path, element]) => (
+              <Route
+                key={path}
+                path={path}
+                element={<RequireAuth>{element}</RequireAuth>}
+              />
+            ))}
+
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
+      </div>
+    </>
+  );
+};
+
+// BrowserRouter wraps the providers so context consumers may use router hooks.
+const App = () => (
+  <BrowserRouter>
+    <AuthProvider>
+      <SpotifyAuthProvider>
+        <SocketProvider>
+          <GamificationProvider>
+            <AppRoutes />
+          </GamificationProvider>
+        </SocketProvider>
+      </SpotifyAuthProvider>
+    </AuthProvider>
+  </BrowserRouter>
+);
 
 export default App;

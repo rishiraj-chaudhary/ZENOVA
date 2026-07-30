@@ -31,13 +31,22 @@ const musicResourceSchema = new mongoose.Schema({
     speechiness: Number
   },
   
-  // Add cultural context tags
   culturalTags: [String],
-  
-  // Add recommendation metadata
+
+  // Therapeutic classification, produced by the recommendation engine.
+  energyLevel: {
+    type: String,
+    enum: ["low", "medium", "high"],
+    default: "medium",
+  },
+  therapeuticFunction: {
+    type: String,
+    enum: ["support", "transition", "energize", "calm", "motivate"],
+    default: "support",
+  },
+
   recommendationScore: Number,
-  lastRecommendedAt: Date
-  //NEW
+  lastRecommendedAt: Date,
 });
 
 // Compound index to avoid duplicates

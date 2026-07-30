@@ -1,11 +1,7 @@
 import { getLeaderboard } from "../services/leaderboardService.js";
+import asyncHandler from "../utils/asyncHandler.js";
 
-export const fetchLeaderBoard=async(req,res)=>{
-    try{
-        const {type='alltime',period='all'}=req.query;
-        const entries=await getLeaderboard(type,period);
-        res.json({entries});
-    }catch(err){
-        res.status(500).json({ message: 'Error fetching leaderboard', error: err.message });
-    }
-}
+export const fetchLeaderBoard = asyncHandler(async (req, res) => {
+  const { type = "alltime", period = "all" } = req.query;
+  res.json({ entries: await getLeaderboard(type, period) });
+});

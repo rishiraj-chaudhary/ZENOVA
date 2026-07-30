@@ -1,37 +1,11 @@
-export const getUserStats=async(userId,token)=>{
-    try{
-        const response=await fetch(`http://localhost:3000/api/gamification/stats/${userId}`,{
-            method:'GET',
-            headers:{
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-        if(!response.ok){
-            throw new Error('Failed to fetch user stats');
-        }
-        return await response.json();
-    }catch(err){
-        console.error('Error fetching user stats:', err);
-        throw err;
-    }
-}
+import apiClient from "./client.js";
 
-export const getLeaderboard=async(type='alltime',period='all')=>{
-    try{
-        const response=await fetch(`http://localhost:3000/api/leaderboard?type=${type}&period=${period}`,{
-            method:'GET',
-            headers:{
-                'Content-type':'application/json'
-            }
-        });
-        if(!response.ok){
-            throw new Error('Failed to fetch leaderboard');
-        }
-        const data=await response.json();
-        return data.entries || [];
-    }catch(err){
-        console.error('Error fetching leaderboard:', err);
-        throw err;
-    }
-}
+// The caller's identity comes from their token, so no userId argument is needed.
+export const getUserStats = () => apiClient.get("/gamification/stats");
+
+export const getLeaderboard = async (type = "alltime", period = "all") => {
+  const { entries } = await apiClient.get("/leaderboard", {
+    params: { type, period },
+  });
+  return entries ?? [];
+};

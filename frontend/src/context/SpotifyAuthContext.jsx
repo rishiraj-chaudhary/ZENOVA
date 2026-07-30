@@ -1,191 +1,185 @@
-import axios from 'axios';
-import React, { createContext, useCallback, useEffect, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import * as musicAPI from "../api/musicAPI.js";
+
+const STORAGE_KEY = "spotify_session";
+const SDK_SRC = "https://sdk.scdn.co/spotify-player.js";
+const PLAYER_NAME = "Zenova Music Therapy Player";
 
 export const SpotifyAuthContext = createContext(null);
 
+/**
+ * The three token fields are always written and cleared together, so they are
+ * stored as one record instead of three independent localStorage keys that
+ * could drift out of sync.
+ */
+const readStoredSession = () => {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredSession = (session) => {
+  if (session) localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  else localStorage.removeItem(STORAGE_KEY);
+};
+
+const toSession = ({ accessToken, refreshToken, expiresIn }, previous) => ({
+  accessToken,
+  refreshToken: refreshToken ?? previous?.refreshToken ?? null,
+  expiresAt: Date.now() + expiresIn * 1000,
+});
+
+const isValid = (session) => Boolean(session && Date.now() < session.expiresAt);
+
 export const SpotifyAuthProvider = ({ children }) => {
-  const [accessToken, setAccessToken] = useState(localStorage.getItem('spotify_access_token') || null);
-  const [refreshToken, setRefreshToken] = useState(localStorage.getItem('spotify_refresh_token') || null);
-  const [expiresAt, setExpiresAt] = useState(localStorage.getItem('spotify_expires_at') || null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [session, setSession] = useState(readStoredSession);
   const [player, setPlayer] = useState(null);
-  
-  // Initialize authentication state
-  useEffect(() => {
-    const checkTokenValidity = () => {
-      if (!accessToken || !expiresAt) {
-        setIsAuthenticated(false);
-        return;
-      }
-      
-      const now = Date.now();
-      const isValid = now < parseInt(expiresAt);
-      setIsAuthenticated(isValid);
-      
-      // If token is expired but we have a refresh token, refresh it
-      if (!isValid && refreshToken) {
-        refreshAccessToken();
-      }
-    };
-    
-    checkTokenValidity();
-  }, [accessToken, expiresAt, refreshToken]);
-  
-  // Function to refresh token
+  const playerRef = useRef(null);
+
+  const isAuthenticated = isValid(session);
+
+  const persist = useCallback((next) => {
+    writeStoredSession(next);
+    setSession(next);
+  }, []);
+
+  const logout = useCallback(() => {
+    playerRef.current?.disconnect();
+    playerRef.current = null;
+    setPlayer(null);
+    persist(null);
+    localStorage.removeItem("spotify_device_id");
+  }, [persist]);
+
   const refreshAccessToken = useCallback(async () => {
-    if (!refreshToken) return;
-    
+    if (!session?.refreshToken) return;
+
     try {
-      const response = await axios.post('http://localhost:3000/api/music/recommend/spotify/refresh', {
-        refreshToken
-      });
-      
-      const { accessToken: newToken, expiresIn } = response.data;
-      const newExpiresAt = Date.now() + expiresIn * 1000;
-      
-      setAccessToken(newToken);
-      setExpiresAt(newExpiresAt.toString());
-      
-      localStorage.setItem('spotify_access_token', newToken);
-      localStorage.setItem('spotify_expires_at', newExpiresAt.toString());
-      
-      setIsAuthenticated(true);
+      const tokens = await musicAPI.refreshSpotifyToken(session.refreshToken);
+      persist(toSession(tokens, session));
     } catch (error) {
-      console.error('Failed to refresh token:', error);
+      console.error("Failed to refresh Spotify token:", error.message);
       logout();
     }
-  }, [refreshToken]);
-  
-  // Function to initiate login
-  const login = async () => {
-    try {
-      const response = await axios.get('http://localhost:3000/api/music/recommend/spotify/auth');
-      window.location.href = response.data.authUrl;
-    } catch (error) {
-      console.error('Failed to get auth URL:', error);
-    }
-  };
-  
-  // Function to handle callback
-  const handleCallback = async (code, state) => {
-    try {
-      const response = await axios.get(`http://localhost:3000/api/music/recommend/spotify/callback?code=${code}&state=${state}`);
-      
-      const { accessToken: newToken, refreshToken: newRefreshToken, expiresIn } = response.data;
-      const newExpiresAt = Date.now() + expiresIn * 1000;
-      
-      setAccessToken(newToken);
-      setRefreshToken(newRefreshToken);
-      setExpiresAt(newExpiresAt.toString());
-      
-      localStorage.setItem('spotify_access_token', newToken);
-      localStorage.setItem('spotify_refresh_token', newRefreshToken);
-      localStorage.setItem('spotify_expires_at', newExpiresAt.toString());
-      
-      setIsAuthenticated(true);
-      
-      return true;
-    } catch (error) {
-      console.error('Failed to handle callback:', error);
-      return false;
-    }
-  };
-  
-  // Function to logout
-  const logout = () => {
-    setAccessToken(null);
-    setRefreshToken(null);
-    setExpiresAt(null);
-    setIsAuthenticated(false);
-    setPlayer(null);
-    
-    localStorage.removeItem('spotify_access_token');
-    localStorage.removeItem('spotify_refresh_token');
-    localStorage.removeItem('spotify_expires_at');
-  };
-  
-  // Initialize Spotify Web Playback SDK
-  const initializePlayer = useCallback(() => {
-    if (!accessToken || !window.Spotify) return;
-    
-    const player = new window.Spotify.Player({
-      name: 'Zenova Music Therapy Player',
-      getOAuthToken: cb => cb(accessToken),
-      volume: 0.5
-    });
-    
-    // Error handling
-    player.addListener('initialization_error', ({ message }) => {
-      console.error('Failed to initialize player:', message);
-    });
-    
-    player.addListener('authentication_error', ({ message }) => {
-      console.error('Failed to authenticate:', message);
-      refreshAccessToken();
-    });
-    
-    player.addListener('account_error', ({ message }) => {
-      console.error('Failed to validate account:', message);
-    });
-    
-    player.addListener('playback_error', ({ message }) => {
-      console.error('Failed to perform playback:', message);
-    });
-    
-    // Ready
-    player.addListener('ready', ({ device_id }) => {
-      console.log('Ready with Device ID', device_id);
-      localStorage.setItem('spotify_device_id', device_id);
-    });
-    
-    // Not Ready
-    player.addListener('not_ready', ({ device_id }) => {
-      console.log('Device ID has gone offline', device_id);
-      localStorage.removeItem('spotify_device_id');
-    });
-    
-    // Connect to the player
-    player.connect();
-    
-    setPlayer(player);
-    
-    return () => {
-      player.disconnect();
-    };
-  }, [accessToken, refreshAccessToken]);
-  
-  // Load Spotify SDK script
+  }, [session, persist, logout]);
+
+  // Renews a stored-but-expired token once on load.
   useEffect(() => {
-    if (!isAuthenticated) return;
-    
-    const script = document.createElement('script');
-    script.src = 'https://sdk.scdn.co/spotify-player.js';
+    if (session && !isValid(session) && session.refreshToken) {
+      refreshAccessToken();
+    }
+  }, [session, refreshAccessToken]);
+
+  const login = useCallback(async () => {
+    try {
+      const { authUrl } = await musicAPI.fetchSpotifyAuthUrl();
+      window.location.href = authUrl;
+    } catch (error) {
+      console.error("Failed to start Spotify login:", error.message);
+    }
+  }, []);
+
+  const handleCallback = useCallback(
+    async (code, state) => {
+      try {
+        persist(toSession(await musicAPI.exchangeSpotifyCode({ code, state })));
+        return true;
+      } catch (error) {
+        console.error("Spotify callback failed:", error.message);
+        return false;
+      }
+    },
+    [persist]
+  );
+
+  /**
+   * Loads the Web Playback SDK once per authenticated session and tears the
+   * player down on cleanup. The previous version dropped the disconnect
+   * function returned by its initializer, so every token refresh left an
+   * orphaned player connected.
+   */
+  useEffect(() => {
+    if (!isAuthenticated) return undefined;
+
+    const script = document.createElement("script");
+    script.src = SDK_SRC;
     script.async = true;
-    
     document.body.appendChild(script);
-    
+
     window.onSpotifyWebPlaybackSDKReady = () => {
-      initializePlayer();
+      if (!window.Spotify) return;
+
+      const instance = new window.Spotify.Player({
+        name: PLAYER_NAME,
+        getOAuthToken: (callback) => callback(session.accessToken),
+        volume: 0.5,
+      });
+
+      instance.addListener("authentication_error", () => refreshAccessToken());
+      ["initialization_error", "account_error", "playback_error"].forEach((event) =>
+        instance.addListener(event, ({ message }) =>
+          console.error(`Spotify ${event}:`, message)
+        )
+      );
+
+      instance.addListener("ready", ({ device_id: deviceId }) =>
+        localStorage.setItem("spotify_device_id", deviceId)
+      );
+      instance.addListener("not_ready", () =>
+        localStorage.removeItem("spotify_device_id")
+      );
+
+      instance.connect();
+      playerRef.current = instance;
+      setPlayer(instance);
     };
-    
+
     return () => {
-      document.body.removeChild(script);
+      playerRef.current?.disconnect();
+      playerRef.current = null;
+      setPlayer(null);
+      script.remove();
+      delete window.onSpotifyWebPlaybackSDKReady;
     };
-  }, [isAuthenticated, initializePlayer]);
-  
+    // Re-running on every token refresh would needlessly reload the SDK; the
+    // player reads the current token through the getOAuthToken callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
+
+  const value = useMemo(
+    () => ({
+      accessToken: session?.accessToken ?? null,
+      isAuthenticated,
+      player,
+      login,
+      logout,
+      handleCallback,
+      refreshAccessToken,
+    }),
+    [session, isAuthenticated, player, login, logout, handleCallback, refreshAccessToken]
+  );
+
   return (
-    <SpotifyAuthContext.Provider
-      value={{
-        accessToken,
-        isAuthenticated,
-        player,
-        login,
-        logout,
-        handleCallback,
-        refreshAccessToken
-      }}
-    >
-      {children}
-    </SpotifyAuthContext.Provider>
+    <SpotifyAuthContext.Provider value={value}>{children}</SpotifyAuthContext.Provider>
   );
 };
+
+export const useSpotifyAuth = () => {
+  const context = useContext(SpotifyAuthContext);
+  if (!context) {
+    throw new Error("useSpotifyAuth must be used within a SpotifyAuthProvider");
+  }
+  return context;
+};
+
+export default SpotifyAuthContext;

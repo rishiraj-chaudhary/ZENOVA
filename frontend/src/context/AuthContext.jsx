@@ -1,118 +1,82 @@
-import axios from 'axios';
-import { createContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import * as authAPI from "../api/authAPI.js";
+import { fetchUserProfile } from "../api/userAPI.js";
+import { clearStoredAuth, hasStoredAuth, storeAuth } from "../utils/authStorage.js";
 
-export const AuthContext = createContext();
+export const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
-    const [currentPage, setCurrentPage] = useState('home');
-    const [spotifyToken, setSpotifyToken] = useState(null);
-    const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-    // ✅ Compute isAuthenticated based on user state
-    const isAuthenticated = !!user;
+  // Restores the session on reload. A failed lookup means the stored token is
+  // stale, so it is discarded rather than left to fail every later request.
+  useEffect(() => {
+    const restoreSession = async () => {
+      if (!hasStoredAuth()) {
+        setLoading(false);
+        return;
+      }
 
-    // useEffect(() => {
-    //     const checkAuthStatus = async () => {
-    //         try {
-    //             const token = sessionStorage.getItem('token');
-    //             const userId = sessionStorage.getItem('userId');
-                
-    //             if (token && userId) {
-    //                 const { data } = await axios.get(`http://localhost:3000/api/users/${userId}`, {
-    //                     headers: {
-    //                         Authorization: `Bearer ${token}`
-    //                     }
-    //                 });
-    //                 setUser(data);
-    //             }
-    //         } catch (err) {
-    //             console.log('Not authenticated');
-    //             sessionStorage.removeItem('token');
-    //             sessionStorage.removeItem('userId');
-    //         } finally {
-    //             setLoading(false);
-    //         }
-    //     };
-
-    //     checkAuthStatus();
-    // }, []);
-    useEffect(() => {
-        const checkAuthStatus = async () => {
-          try {
-            const token = sessionStorage.getItem('token');
-            const userId = sessionStorage.getItem('userId');
-            
-            // Only attempt to fetch user data if both token and userId exist
-            if (token && userId) {
-              try {
-                const { data } = await axios.get(`http://localhost:3000/api/users/profile`, {
-                  headers: {
-                    Authorization: `Bearer ${token}`
-                  }
-                });
-                setUser(data);
-              } catch (err) {
-                // Only log an error if we actually had credentials to check
-                console.log('Authentication failed - clearing stored credentials');
-                sessionStorage.removeItem('token');
-                sessionStorage.removeItem('userId');
-              }
-            }
-          } finally {
-            setLoading(false);
-          }
-        };
-        
-        checkAuthStatus();
-      }, []);
-
-    const login = async (userData) => {
-        setUser(userData);
-        setCurrentPage('profile');
-        return true;
+      try {
+        setUser(await fetchUserProfile());
+      } catch {
+        clearStoredAuth();
+      } finally {
+        setLoading(false);
+      }
     };
 
-    const logout = async () => {
-        try {
-            const token = sessionStorage.getItem('token');
-            if (token) {
-                await axios.post('http://localhost:3000/api/auth/logout', {}, {
-                    headers: {
-                        Authorization: `Bearer ${token}`
-                    }
-                });
-            }
-        } catch (err) {
-            console.error('Logout Error:', err);
-        } finally {
-            sessionStorage.removeItem('token');
-            sessionStorage.removeItem('userId');
-            // if (user) {
-            //     sessionStorage.removeItem(`chat_messages_${user.id}`);
-            // }
-            setUser(null);
-            setCurrentPage('home');
-            setSpotifyToken(null);
-        }
-    };
+    restoreSession();
+  }, []);
 
-    return (
-        <AuthContext.Provider value={{
-            user,
-            login,
-            logout,
-            currentPage,
-            setCurrentPage,
-            spotifyToken, 
-            setSpotifyToken,
-            loading,
-            isAuthenticated  // ✅ Add this line
-        }}>
-            {children}
-        </AuthContext.Provider>
-    );
+  const login = useCallback(async (credentials) => {
+    const { user: authenticatedUser } = await authAPI.login(credentials);
+    const { token, ...profile } = authenticatedUser;
+
+    storeAuth({ token, userId: profile._id });
+    setUser(profile);
+
+    return profile;
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await authAPI.logout();
+    } catch (error) {
+      // The local session must be cleared even if the server call fails.
+      console.error("Logout request failed:", error.message);
+    } finally {
+      clearStoredAuth();
+      setUser(null);
+    }
+  }, []);
+
+  /** Replaces the profile once the intro flow has been completed. */
+  const completeOnboarding = useCallback((profile) => setUser(profile), []);
+
+  const value = useMemo(
+    () => ({
+      user,
+      loading,
+      isAuthenticated: Boolean(user),
+      // Existing accounts predate onboarding, so only a profile that has been
+      // loaded and has no onboardedAt should be prompted.
+      needsOnboarding: Boolean(user) && !user.onboardedAt,
+      login,
+      logout,
+      completeOnboarding,
+    }),
+    [user, loading, login, logout, completeOnboarding]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
+  return context;
 };
 
 export default AuthContext;
-

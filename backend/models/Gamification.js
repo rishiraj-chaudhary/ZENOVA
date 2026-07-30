@@ -12,7 +12,14 @@ const gamificationSchema = new mongoose.Schema({
   playlistsCreated:{type: Number, default: 0},
   songsAdded:{type: Number, default: 0},
   dailyLogins: { type: Number, default: 0 },
+  // When the streak grace period was last consumed, so it cannot be used
+  // repeatedly to keep a streak alive indefinitely.
+  lastGraceUsedAt: { type: Date, default: null },
   badges: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Badge' }]
 }, { timestamps: true });
+
+// One stats document per user, and the leaderboard sorts on these three.
+gamificationSchema.index({ userId: 1 }, { unique: true });
+gamificationSchema.index({ totalPoints: -1, level: -1, currentStreak: -1 });
 
 export default mongoose.model('Gamification', gamificationSchema);

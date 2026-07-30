@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --workspaces --include-workspace-root
+
+      - name: Run tests
+        run: npm test --workspace backend
+        env:
+          # The suite spins up its own in-memory MongoDB; these only satisfy
+          # the config module's production-secret guard.
+          JWT_SECRET: ci-jwt-secret
+          SESSION_SECRET: ci-session-secret
+          FRONTEND_URL: http://localhost:5173
+
+  frontend:
+    name: Frontend lint & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --workspaces --include-workspace-root
+
+      - name: Lint
+        run: npm run lint --workspace frontend
+
+      - name: Build
+        run: npm run build --workspace frontend

@@ -1,131 +1,136 @@
-import { Badge, UserBadge } from '../models/Badge.js';
-import Gamification from '../models/Gamification.js';
-import Playlist from '../models/Playlist.js';
+import { BADGES } from "../config/gamification.js";
+import { Badge, UserBadge } from "../models/Badge.js";
+import Gamification from "../models/Gamification.js";
+import Playlist from "../models/Playlist.js";
 
- //Check badge requirements
-export const checkBadgeRequirement=async(userId,badge,userGamification)=>{
-    const {type,value}=badge.requirement;
-    switch(type){
-        case 'playlist_count' :
-            const playlistCount = await Playlist.countDocuments({userId});
-            return playlistCount>=value;
-        case 'streak_days':
-            return userGamification.currentStreak>=value;
-        case 'playlists_shared':
-            return userGamification.playlistsShared >= value;
-        case 'daily_logins':
-            return userGamification.dailyLogins >= value;
-        default: 
-            console.warn(`Unknown badge requirement type : ${type}`);
-            return false;
-    }
-}
-export const awardBadge=async(userId,badgeId,socketManager)=>{
-    try{
-        const existingUserBadge=await UserBadge.findOne({userId,badgeId});
-        if(existingUserBadge){
-            return false;//user already has this badge 
-        }
-        //Create new userBadge record
-        const userBadge=new UserBadge({
-            userId,
-            badgeId
-        });
-        await userBadge.save();
-        //Update user's gamification
-        const userGamification=await Gamification.findOne({userId});
-        if(userGamification){
-            userGamification.badges.push(badgeId);
-            await userGamification.save();
-        }
-        //Get badge details
-        const badge=await Badge.findById(badgeId);
-        //Real time notification
-        if(socketManager && socketManager.emitToUser){
-            socketManager.emitToUser(userId,'badge_earned',{
-                badge:{
-                    id: badge._id,
-                    name: badge.name,
-                    description: badge.description,
-                    rarity: badge.rarity,
-                    icon: badge.icon,
-                    category: badge.category
-                },
-                earnedAt:userBadge.earnedAt
-            });
-        }
-        console.log(`Badge "${badge.name}" awarded to user ${userId}`);
-        return true;
-    }catch(err){
-        console.error('Error awarding badge:', err);
-        throw err;
-    }
-}
-export const checkAndAwardBadges=async(userId,socketManager)=>{
-    try{
-        const userGamification=await Gamification.findOne({userId});
-        if(!userGamification){
-            console.log(`No gamification record found for user ${userId}`);
-            return 0;
-        }
-        //Get all active badges
-        const allBadges=await Badge.find({isActive : true});
-        //Get badges user already has
-        const userBadges=await UserBadge.find({userId});
-        const earnedBadgeIds=userBadges.map(ub=> ub.badgeId.toString());
-        let newBadgesAwarded=0;
-        for(const badge of allBadges){
-            //Skip if user already has this badge
-            if(earnedBadgeIds.includes(badge._id.toString())){
-                continue;
-            }
-            //Check if user meets requirements
-            const meetsRequirement=await checkBadgeRequirement(userId,badge,userGamification);
-            if(meetsRequirement){
-                const awarded=await awardBadge(userId,badge._id,socketManager);
-                if(awarded){
-                    newBadgesAwarded++;
-                }
-            }
-        }
-        return newBadgesAwarded;
-    }catch(err){
-        console.error('Error checking badges:', err);
-        throw err;
-    }
-}
-//Get user badges
-export const getUserBadges=async(userId)=>{
-    try{
-        const userBadges=await UserBadge.find({userId}).populate('badgeId').sort({earnedAt : -1});
-        return userBadges.map(userBadge => ({
-            ...userBadge.badgeId.toObject(),
-            earnedAt: userBadge.earnedAt,
-            isDisplayed: userBadge.isDisplayed
-        }));
-    }catch(err){
-        console.error('Error getting user badges:', err);
-        throw err;
-    }
-}
-//Initialize default badges in the db
-export const initializeDefaultBadges=async()=>{
-    try{
-        const {BADGES} =await import ('../config/gamification.js');
-        for(const badgeData of BADGES){
-            const existingBadge=await Badge.findOne({name: badgeData.name});
-            if(!existingBadge){
-                const badge=new Badge({
-                    ...badgeData,
-                    icon: badgeData.icon || '/icons/badge-default.svg',
-                    pointsReward: badgeData.pointsReward || 0,
-                    isActive: true
-                });
-                await badge.save();
-                console.log(`Created badge: ${badge.name}`);
-            }
-        }
-    }catch(err){
-        console.error('Error initializing badges:', err);
-    }
-}
+/**
+ * Reads every value a badge requirement can be measured against, in one pass.
+ *
+ * Requirements were previously evaluated one badge at a time, each issuing its
+ * own query — so N badges meant N round-trips even though they all read the
+ * same handful of numbers.
+ */
+const loadProgressSnapshot = async (userId, stats) => {
+  const playlistCount = await Playlist.countDocuments({ userId });
+
+  return {
+    playlist_count: playlistCount,
+    streak_days: stats.currentStreak ?? 0,
+    playlists_shared: stats.playlistsShared ?? 0,
+    daily_logins: stats.dailyLogins ?? 0,
+    songs_added: stats.songsAdded ?? 0,
+  };
+};
+
+const meetsRequirement = (badge, snapshot) => {
+  const { type, value } = badge.requirement;
+  const progress = snapshot[type];
+
+  if (progress === undefined) {
+    console.warn(`Unknown badge requirement type: ${type}`);
+    return false;
+  }
+
+  return progress >= value;
+};
+
+const notifyBadgeEarned = (socketManager, userId, badge, earnedAt) => {
+  socketManager?.emitToUser?.(userId, "badge_earned", {
+    badge: {
+      id: badge._id,
+      name: badge.name,
+      description: badge.description,
+      rarity: badge.rarity,
+      icon: badge.icon,
+      category: badge.category,
+    },
+    earnedAt,
+  });
+};
+
+/**
+ * Evaluates every active badge against the user's current progress and awards
+ * any newly earned ones. Returns the number awarded.
+ */
+export const checkAndAwardBadges = async (userId, socketManager) => {
+  const stats = await Gamification.findOne({ userId }).lean();
+  if (!stats) return 0;
+
+  const [activeBadges, ownedBadges] = await Promise.all([
+    Badge.find({ isActive: true }).lean(),
+    UserBadge.find({ userId }).select("badgeId").lean(),
+  ]);
+
+  const ownedBadgeIds = new Set(ownedBadges.map((entry) => entry.badgeId.toString()));
+  const snapshot = await loadProgressSnapshot(userId, stats);
+
+  const newlyEarned = activeBadges.filter(
+    (badge) =>
+      !ownedBadgeIds.has(badge._id.toString()) && meetsRequirement(badge, snapshot)
+  );
+
+  if (newlyEarned.length === 0) return 0;
+
+  const earnedAt = new Date();
+
+  // ordered:false lets the unique {userId,badgeId} index absorb a concurrent
+  // duplicate award instead of failing the whole batch.
+  try {
+    await UserBadge.insertMany(
+      newlyEarned.map((badge) => ({ userId, badgeId: badge._id, earnedAt })),
+      { ordered: false }
+    );
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+  }
+
+  await Gamification.updateOne(
+    { userId },
+    { $addToSet: { badges: { $each: newlyEarned.map((badge) => badge._id) } } }
+  );
+
+  newlyEarned.forEach((badge) =>
+    notifyBadgeEarned(socketManager, userId, badge, earnedAt)
+  );
+
+  return newlyEarned.length;
+};
+
+export const getUserBadges = async (userId) => {
+  const userBadges = await UserBadge.find({ userId })
+    .populate("badgeId")
+    .sort({ earnedAt: -1 })
+    .lean();
+
+  return userBadges
+    .filter((entry) => entry.badgeId)
+    .map((entry) => ({
+      ...entry.badgeId,
+      earnedAt: entry.earnedAt,
+      isDisplayed: entry.isDisplayed,
+    }));
+};
+
+/** Idempotently seeds the badge catalogue defined in config/gamification.js. */
+export const initializeDefaultBadges = async () => {
+  try {
+    await Badge.bulkWrite(
+      BADGES.map((badge) => ({
+        updateOne: {
+          filter: { name: badge.name },
+          update: {
+            $setOnInsert: {
+              ...badge,
+              icon: badge.icon ?? "/icons/badge-default.svg",
+              pointsReward: badge.pointsReward ?? 0,
+              isActive: true,
+            },
+          },
+          upsert: true,
+        },
+      }))
+    );
+  } catch (error) {
+    console.error("Failed to initialize default badges:", error.message);
+  }
+};

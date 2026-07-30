@@ -1,24 +1,21 @@
-import SpotifyPlayer from './SpotifyPlayer';
+import SongFeedback from "./SongFeedback.jsx";
+import SpotifyPlayer from "./SpotifyPlayer.jsx";
 
 /**
  * RecommendationCard component that displays a music recommendation
  * with consistent Spotify ID extraction and formatting
  */
-function RecommendationCard({ index,song, moodColors, onAddToPlaylist , isCurrentlyPlaying ,autoplayEnabled,onTrackEnded,onPlay}) {
-  // Try multiple sources to find a valid track ID
+function RecommendationCard({ index, song, moodColors, onAddToPlaylist, isCurrentlyPlaying, autoplayEnabled, onTrackEnded, onPlay, sessionId, moodAtTime }) {
   const extractSpotifyTrackId = (spotifyString) => {
     if (!spotifyString) return null;
     console.log("RecommendationCard song object:", song);
     try {
-      // Handle URI format (spotify:track:xyz)
       let matches = spotifyString.match(/spotify:track:([a-zA-Z0-9]+)/);
       if (matches && matches[1]) return matches[1];
       
-      // Handle URL format with query parameters (https://open.spotify.com/track/xyz?si=abc)
       matches = spotifyString.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)(\?|$)/);
       if (matches && matches[1]) return matches[1];
       
-      // Handle direct ID (if already extracted)
       if (/^[a-zA-Z0-9]{22}$/.test(spotifyString)) return spotifyString;
       
       return null;
@@ -28,10 +25,8 @@ function RecommendationCard({ index,song, moodColors, onAddToPlaylist , isCurren
     }
   };
 
-  // Extract the Spotify track ID from various possible properties
   let spotifyTrackId = null;
   
-  // Attempt to extract from different fields, in order of preference
   if (song.spotifyId && typeof song.spotifyId === 'string') {
     spotifyTrackId = extractSpotifyTrackId(song.spotifyId);
   }
@@ -44,7 +39,6 @@ function RecommendationCard({ index,song, moodColors, onAddToPlaylist , isCurren
     spotifyTrackId = extractSpotifyTrackId(song.spotifyUrl);
   }
 
-  //Handle click on card to start playing song
   const handleCardClick=()=>{
     if(onPlay){
         onPlay(index);
@@ -53,8 +47,10 @@ function RecommendationCard({ index,song, moodColors, onAddToPlaylist , isCurren
 
   return (
     <div 
-      className="p-4 rounded-lg mb-4 shadow-md transform hover:scale-[1.01] transition-transform duration-200" 
-      style={{ backgroundColor: moodColors.primary }} onClick={handleCardClick}
+      className="mb-4 rounded-lg bg-slate-800/80 p-4 shadow-md transition-transform duration-200 hover:scale-[1.01]"
+
+      style={{ borderLeft: `4px solid ${moodColors.primary}` }}
+      onClick={handleCardClick}
     >
       {/* Song header with album art */}
       <div className="flex items-center mb-3">
@@ -67,16 +63,16 @@ function RecommendationCard({ index,song, moodColors, onAddToPlaylist , isCurren
         ) : (
           <div 
             className="w-12 h-12 rounded-lg mr-3 flex items-center justify-center shadow-md" 
-            style={{ backgroundColor: moodColors.secondary }}
+            style={{ backgroundColor: moodColors.primary }}
           >
-            <i className="fa-solid fa-music text-2xl" style={{ color: moodColors.background }}></i>
+            <i className="fa-solid fa-music text-2xl text-slate-900" aria-hidden="true"></i>
           </div>
         )}
         <div className="flex-1 overflow-hidden">
-          <h4 className="font-bold text-base truncate" style={{ color: moodColors.text }}>
+          <h4 className="truncate text-base font-bold text-white">
             {song.title}
           </h4>
-          <p className="text-sm truncate" style={{ color: moodColors.text }}>
+          <p className="truncate text-sm text-gray-300">
             {song.artist}
           </p>
         </div>
@@ -134,19 +130,30 @@ function RecommendationCard({ index,song, moodColors, onAddToPlaylist , isCurren
             e.stopPropagation();
             onAddToPlaylist(song.musicId)}}
           className="px-3 py-1 rounded text-xs font-medium flex items-center"
-          style={{ backgroundColor: moodColors.secondary, color: '#FFFFFF' }}
+          style={{ backgroundColor: moodColors.secondary, color: '#0f172a' }}
         >
           <i className="fa-solid fa-plus mr-1"></i> Add
         </button>
+
+        <div className="ml-auto">
+          <SongFeedback
+            musicId={song.musicId}
+            sessionId={sessionId}
+            moodAtTime={moodAtTime}
+          />
+        </div>
       </div>
 
-      {/* Recommendation reason */}
-      <div 
-        className="p-2 rounded text-xs italic" 
-        style={{ backgroundColor: moodColors.secondary, color: '#FFFFFF' }}
-      >
-        {song.reason}
-      </div>
+      {/* Why this song — the explanation is the differentiator, so it is
+          labelled rather than left as an unattributed italic caption. */}
+      {song.reason && (
+        <div className="rounded-lg bg-black/30 p-3">
+          <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-white/70">
+            Why this one
+          </p>
+          <p className="text-xs leading-relaxed text-white">{song.reason}</p>
+        </div>
+      )}
     </div>
   );
 }

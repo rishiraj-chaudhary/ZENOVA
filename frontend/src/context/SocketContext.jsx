@@ -1,168 +1,105 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { io } from "socket.io-client";
+import { SOCKET_URL } from "../config/api.js";
+import { useAuth } from "./AuthContext.jsx";
 
-import { createContext, useEffect, useContext as useReactContext, useState } from 'react';
-import { io } from 'socket.io-client'; //connects frontend to backend socket-io server
-import AuthContext from './AuthContext';
+export const SocketContext = createContext(null);
 
-//Create context
-export const SocketContext=createContext();
-//custom hook to use SocketContext
-export const useSocket=()=> 
-    useReactContext(SocketContext);
-export const SocketProvider=({children})=>{
-    const [socket,setSocket]=useState(null);//holds socket.io-client instance
-    const [connected,setConnected]=useState(false);//whether socket.io is connected to backend server or not
-    const {user}=useReactContext(AuthContext);
-    //get authenticated user from authContext
-    useEffect(()=>{
-        //only connect if user is verified
-        if(!user){
-            return;
-        }
-        //connect to the socket server
-        const socketInstance=io('http://localhost:3000',{
-            reconnection:true,
-            reconnectionAttempts:5,
-            reconnectionDelay:1000,
-        });
-        //set up event listeners
-        socketInstance.on('connect',()=>{
-            console.log('Socket connected');
-            setConnected(true);
-            // Register user room for personal events
-            if (user && user._id) {
-                socketInstance.emit('register_user', { userId: user._id });
-            }
-        });
-        socketInstance.on('disconnect',()=>{
-            console.log('Socket disconnected');
-            setConnected(false);
-        });
-        socketInstance.on('connect_error',(err)=>{
-            console.log('Socket connection error:',err);
-            setConnected(false);
-        });
-        setSocket(socketInstance);
+export const useSocket = () => {
+  const context = useContext(SocketContext);
+  if (!context) throw new Error("useSocket must be used within a SocketProvider");
+  return context;
+};
 
-        //clean up on unmount
-        return ()=>{
-            console.log('Disconnecting socket');
-            socketInstance.disconnect();
-        };
-    },[user]);
-    //function to join a playlist room
-    //emits 'join_playlist' event to the backend with the following data(playlistId,userId:user._id,username: user.name);
-    const joinPlaylist=(playlistId)=>{
-        if(socket && user && connected){
-            socket.emit('join_playlist',{
-                playlistId,
-                userId:user._id,
-                username: user.name
-            });
-        }
-    }
-    //function to emit add song event to backend
-    const addSong=(playlistId,song)=>{
-        if(socket && user && connected){
-            socket.emit('add_song',{
-                playlistId,
-                song,
-                userId:user._id,
-                username:user.name
-            });
-        }
-    }
-    //function to leave a playlist room
-    const leavePlaylist=(playlistId)=>{
-        if(socket && user && connected){
-            socket.emit('leave_playlist',{
-                playlistId,
-                userId:user._id
-            });
-        }
-    }
-    //function to emit add song event to backend
-    const removeSong=(playlistId,songId)=>{
-        if(socket && user && connected){
-            socket.emit('remove_song',{
-                playlistId,
-                songId,
-                userId:user._id,
-                username:user.name
-            });
-        }
-    }
-    //function to emit add song event to backend
-    const reorderSongs=(playlistId,newOrder)=>{
-        if(socket && user && connected){
-            socket.emit('reorder_songs',{
-                playlistId,
-                newOrder,
-                userId:user._id,
-                username:user.name
-            });
-        }
-    }
-    //Function to notify about collaborator accepted
-    const notifyCollaboratorAdded=(playlistId, collaboratorId, collaboratorName)=>{
-        if(socket && user && connected){
-            console.log('Emitting collaborator_added event:',{
-                playlistId,
-                userId: user._id,
-                username: user.name,
-                collaboratorId,
-                collaboratorName
-            });
-            socket.emit('collaborator_added',{
-                playlistId,
-                userId: user._id,
-                username: user.name,
-                collaboratorId,
-                collaboratorName
-            });
-        }
+export const SocketProvider = ({ children }) => {
+  const [socket, setSocket] = useState(null);
+  const [connected, setConnected] = useState(false);
+  const { user } = useAuth();
 
-    }
-    //Function to notify about invitation accepted
-    const notifyInvitationAccepted=(playlistId)=>{
-        if(socket && user && connected){
-            socket.emit('invitation_accepted',{
-                playlistId,
-                userId: user._id,
-                username: user.name
-            });
-        }
-    }
-    const notifyCollaboratorRemoved=(playlistId, removedCollaboratorId, removedCollaboratorName)=>{
-        if(socket && user && connected){
-                console.log('Emitting collaborator_removed event:', {
-                playlistId,
-                userId: user._id,
-                username: user.name,
-                removedCollaboratorId,
-                removedCollaboratorName
-            });
-            socket.emit('collaborator_removed',{
-                playlistId,
-                userId: user._id,
-                username: user.name,
-                removedCollaboratorId,
-                removedCollaboratorName
-            });
-        }
+  useEffect(() => {
+    if (!user) {
+      setSocket(null);
+      setConnected(false);
+      return undefined;
     }
 
-    const notifyPlaylistUpdate=()=>{
-        if(socket && user && connected){
-            socket.emit('playlist_updated',{
-                userId:user._id,
-                username:user.name
-            });
-        }
-    }
-    return(
-        <SocketContext.Provider value={{socket,connected,joinPlaylist,leavePlaylist,addSong,removeSong,reorderSongs,notifyCollaboratorAdded,notifyInvitationAccepted,notifyCollaboratorRemoved,notifyPlaylistUpdate}}>
-            {children}
-        </SocketContext.Provider>
-    )
-}
+    const instance = io(SOCKET_URL, {
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+
+    instance.on("connect", () => {
+      setConnected(true);
+      // Joins the personal room the server emits gamification events to.
+      instance.emit("register_user", { userId: user._id });
+    });
+
+    instance.on("disconnect", () => setConnected(false));
+    instance.on("connect_error", (error) => {
+      console.error("Socket connection error:", error.message);
+      setConnected(false);
+    });
+
+    setSocket(instance);
+
+    return () => {
+      instance.disconnect();
+      setSocket(null);
+      setConnected(false);
+    };
+  }, [user]);
+
+  /**
+   * Every collaboration event carries the same actor fields and requires the
+   * same "connected and signed in" guard, so both live here once instead of
+   * being repeated in each emitter.
+   */
+  const emit = useCallback(
+    (event, payload = {}) => {
+      if (!socket || !connected || !user) return;
+      socket.emit(event, { ...payload, userId: user._id, username: user.name });
+    },
+    [socket, connected, user]
+  );
+
+  const value = useMemo(
+    () => ({
+      socket,
+      connected,
+      joinPlaylist: (playlistId) => emit("join_playlist", { playlistId }),
+      leavePlaylist: (playlistId) => emit("leave_playlist", { playlistId }),
+      addSong: (playlistId, song) => emit("add_song", { playlistId, song }),
+      removeSong: (playlistId, songId) => emit("remove_song", { playlistId, songId }),
+      reorderSongs: (playlistId, newOrder) =>
+        emit("reorder_songs", { playlistId, newOrder }),
+      notifyCollaboratorAdded: (playlistId, collaboratorId, collaboratorName) =>
+        emit("collaborator_added", { playlistId, collaboratorId, collaboratorName }),
+      notifyCollaboratorRemoved: (
+        playlistId,
+        removedCollaboratorId,
+        removedCollaboratorName
+      ) =>
+        emit("collaborator_removed", {
+          playlistId,
+          removedCollaboratorId,
+          removedCollaboratorName,
+        }),
+      notifyInvitationAccepted: (playlistId) =>
+        emit("invitation_accepted", { playlistId }),
+      notifyPlaylistUpdate: (playlistId) => emit("playlist_updated", { playlistId }),
+    }),
+    [socket, connected, emit]
+  );
+
+  return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;
+};
+
 export default SocketContext;

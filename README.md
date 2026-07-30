@@ -1,6 +1,47 @@
-Music Therapy Platform
-An AI-powered collaborative music therapy platform that helps users discover, create, and share therapeutic playlists through intelligent mood analysis and real-time collaboration.
-Created by RISHIRAJ, an undergraduate at NSUT, this platform bridges the gap between technology and mental health by making music therapy accessible to everyone.
+# ZENOVA
+
+An AI music **wellbeing** companion. Describe how you feel, get songs chosen for that
+state with an explanation for each one, and see how your moods and listening relate
+over time. Playlists are collaborative and sync live between people.
+
+> **ZENOVA is not therapy and not a medical service.** It suggests music based on how
+> you describe your mood. It cannot diagnose or treat anything and is not a substitute
+> for professional care. Messages indicating self-harm are detected and answered with
+> crisis support contacts instead of recommendations.
+
+Built by Rishiraj, NSUT.
+
+---
+
+## Status
+
+| Area | State |
+|---|---|
+| Mood detection → recommendations → Spotify resolution | Working |
+| Crisis detection + region-aware helplines | Working |
+| Personalization from 👍/👎 feedback | Working |
+| Mood history, trends and AI weekly reflection | Working |
+| Before/after session outcome measurement | Working |
+| Real-time collaborative playlists (presence, invites, QR) | Working |
+| Voice playlist creation | Working — Chrome/Edge only (Web Speech API) |
+| Points, levels, badges, streaks, leaderboards | Working |
+| Data export + deletion, consent gating | Working |
+| Backend test suite (85 tests) + CI | Working |
+
+### Known limitations
+
+- **Spotify playback needs Premium.** The embed plays a short preview for free
+  accounts and the Web Playback SDK requires Premium. Songs fall back to a YouTube
+  search link. Verify your app's current Web API entitlements — several endpoints
+  were deprecated for new apps in late 2024.
+- **Voice input is Chrome/Edge only.** The Web Speech API is not available in Firefox
+  or Safari.
+- **No frontend test coverage.** Backend is covered; React components are not.
+- **Single instance.** No Redis cache, no horizontal scaling, no CDN.
+- **Recommendations are LLM-generated per request.** There is no embedding index over
+  the stored catalogue yet, so identical prompts can yield different songs.
+
+---
 
 # TECHNOLOGIES USED
 
@@ -461,7 +502,7 @@ Badge (1) ──awarded─────── (Many) UserBadges
 Mood Analysis: Gemini AI analyzes text for emotional context
 Smart Recommendations: 3-5 songs with therapeutic reasoning
 Conversational Assistant: Interactive chat for music therapy guidance
-Learning Algorithm: Improves based on user feedback
+Personalization: 👍/👎 signals build a taste profile that shapes later prompts and suppresses skipped songs
 
 8.2 Playlist Management
 
@@ -488,7 +529,7 @@ WebSocket Communication: Low-latency real-time updates
 # API Overview
     
 9.1 Core Endpoints
-CategoryEndpointMethodDescriptionAuth/api/auth/registerPOSTUser registration with bcryptAuth/api/auth/loginPOSTJWT + session authenticationMusic/api/music/recommend/recommendationsPOSTAI mood analysis + SpotifyPlaylists/api/playlists/createPOSTCreate playlist with gamificationPlaylists/api/playlists/create-from-voicePOSTVoice command playlistCollaboration/api/playlists/invite/usernamePOSTInvite by usernameCollaboration/api/playlists/invite/qr/:playlistIdPOSTGenerate QR codeGamification/api/gamification/stats/:userIdGETUser progress statsLeaderboard/api/leaderboardGETCurrent rankings
+CategoryEndpointMethodDescriptionAuth/api/auth/registerPOSTUser registration with bcryptAuth/api/auth/loginPOSTJWT + session authenticationMusic/api/music/recommend/recommendationsPOSTAI mood analysis + SpotifyPlaylists/api/playlists/createPOSTCreate playlist with gamificationPlaylists/api/playlists/create-from-voicePOSTVoice command playlistCollaboration/api/playlists/invite/usernamePOSTInvite by usernameCollaboration/api/playlists/invite/qr/:playlistIdPOSTGenerate QR codeGamification/api/gamification/statsGETCaller's own progress statsLeaderboard/api/leaderboardGETCurrent rankings
 
 # Installation & Setup
     

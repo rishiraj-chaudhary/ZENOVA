@@ -1,46 +1,41 @@
-import { useContext, useEffect, useState } from 'react';
-import { getLeaderboard, getUserStats } from '../api/gamificationAPI';
-import BadgeCollection from '../components/Gamification/BadgeCollection.jsx';
-import PointsDisplay from '../components/Gamification/PointsDisplay.jsx';
-import StreakCounter from '../components/Gamification/StreakCounter.jsx';
-import AuthContext from '../context/AuthContext';
-import { useGamification } from '../context/GamificationContext';
+import { useEffect, useState } from "react";
+import { getLeaderboard, getUserStats } from "../api/gamificationAPI.js";
+import BadgeCollection from "../components/Gamification/BadgeCollection.jsx";
+import PointsDisplay from "../components/Gamification/PointsDisplay.jsx";
+import StreakCounter from "../components/Gamification/StreakCounter.jsx";
+import { useAuth } from "../context/AuthContext.jsx";
+import { useGamification } from "../context/GamificationContext.jsx";
 
-const Gamification=()=>{
-    const {user} =useContext(AuthContext);
-    const { state,dispatch } = useGamification();
-    const [leaderboard,setLeaderboard]=useState([]);
-    const [loading,setLoading]=useState(true);
-    const [activeTab,setActiveTab]=useState('overview');
+const Gamification = () => {
+    const { user } = useAuth();
+    const { state, dispatch } = useGamification();
+    const [leaderboard, setLeaderboard] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [activeTab, setActiveTab] = useState("overview");
 
-    useEffect(()=>{
-        const fetchGamificationData=async()=>{
-            if(!user){
-                return;
-            }
-            try{
-                const token=sessionStorage.getItem('token');
-                const [statsData,leaderboardData]=await Promise.all([getUserStats(user._id,token),getLeaderboard()]);
-            
-                dispatch({
-                    type: 'SET_STATS',
-                    payload: {
-                        points: statsData.points,
-                        level: statsData.level,
-                        streak: statsData.streak,
-                        badges: statsData.badges
-                    }
-                });
-                
-                setLeaderboard(Array.isArray(leaderboardData) ? leaderboardData : []);
-                setLoading(false);
-            }catch(err){
-                console.error('Error fetching gamification data:', err);
+    useEffect(() => {
+        if (!user) return;
+
+        const loadGamificationData = async () => {
+            try {
+                const [stats, entries] = await Promise.all([
+                    getUserStats(),
+                    getLeaderboard(),
+                ]);
+
+                dispatch({ type: "SET_STATS", payload: stats });
+                setLeaderboard(entries);
+                setError(null);
+            } catch (loadError) {
+                setError(loadError.message);
+            } finally {
                 setLoading(false);
             }
-        }
-        fetchGamificationData();
-    },[user]);
+        };
+
+        loadGamificationData();
+    }, [user, dispatch]);
 
     if(loading){
         return (
@@ -64,6 +59,11 @@ const Gamification=()=>{
             Your Musical Journey
           </h1>
           <p className="text-xl text-gray-300">Track your progress and compete with others</p>
+          {error && (
+            <p role="alert" className="mt-4 text-sm text-red-400">
+              {error}
+            </p>
+          )}
         </div>
 
         {/* Tab Navigation */}

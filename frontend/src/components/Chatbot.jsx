@@ -1,647 +1,18 @@
-// import { faShuffle } from "@fortawesome/free-solid-svg-icons";
-// import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-// import axios from 'axios';
-// import { useContext, useEffect, useRef, useState } from 'react';
-// import AuthContext from '../context/AuthContext';
-// import { useSocket } from "../context/SocketContext";
-// import RecommendationCard from './RecommendationCard';
-// function Chatbot() {
-//   // Context and state
-//   const { user } = useContext(AuthContext);
-//   const {socket,connected}=useSocket();
-//   const userId = user?._id;
-//   const [messages, setMessages] = useState([]);
-//   const [input, setInput] = useState('');
-//   const [mood, setMood] = useState(null);
-//   const [recommendations, setRecommendations] = useState([]);
-//   const [playlists, setPlaylists] = useState([]);
-//   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
-//   const [selectedSongId, setSelectedSongId] = useState(null);
-//   const [newPlaylistName, setNewPlaylistName] = useState('');
-//   const [isListening, setIsListening] = useState(false);
-//   //Autoplay feature states
-//   const [currentPlayingIndex,setCurrentPlayingIndex]=useState(null);
-//   const [autoplayEnabled,setAutoplayEnabled]=useState(false);
-
-//   // Refs
-//   const messagesEndRef = useRef(null);
-//   const observerRef = useRef(null);
-//   const isAtBottomRef = useRef(true);
-//   const recognitionRef = useRef(null);
-
-//   // --- Resizable panel state ---
-//   const [chatWidth, setChatWidth] = useState(500); // px
-//   const isDraggingRef = useRef(false);
-
-//   // Authentication header helper
-//   const getAuthHeader = () => {
-//     const token = sessionStorage.getItem('token');
-//     if (!token) {
-//       console.error("No authentication token found!");
-//       return { 'Content-Type': 'application/json' };
-//     }
-//     return { 
-//       'Authorization': `Bearer ${token}`,
-//       'Content-Type': 'application/json'
-//     };
-//   };
-
-//   // Load messages from sessionStorage when component mounts
-//   useEffect(() => {
-//     if (user) {
-//       const savedMessagesString = sessionStorage.getItem(`chat_messages_${user._id}`);
-//       let savedMessages = [];
-//       try {
-//         if (savedMessagesString) {
-//           savedMessages = JSON.parse(savedMessagesString);
-//         }
-//         if (savedMessages.length === 0) {
-//           const welcomeMessage = {
-//             text: "Hi! I'm ZENOVA, your music therapy assistant. How are you feeling today? I can recommend some music based on your mood and preferences.",
-//             sender: 'assistant'
-//           };
-//           setMessages([welcomeMessage]);
-//           sessionStorage.setItem(`chat_messages_${user._id}`, JSON.stringify([welcomeMessage]));
-//         } else {
-//           setMessages(savedMessages);
-//         }
-//         const savedRecommendations = sessionStorage.getItem(`recommendations_${user._id}`);
-//         if (savedRecommendations) {
-//           try {
-//             setRecommendations(JSON.parse(savedRecommendations));
-//           } catch (error) {
-//             console.error('Error parsing saved recommendations:', error);
-//           }
-//         }
-//         const savedMood = sessionStorage.getItem(`mood_${user._id}`);
-//         if (savedMood) {
-//           setMood(savedMood);
-//         }
-//       } catch (error) {
-//         console.error('Error handling messages:', error);
-//         const welcomeMessage = {
-//           text: "Hi! I'm ZENOVA, your music therapy assistant. How are you feeling today? I can recommend some music based on your mood and preferences.",
-//           sender: 'assistant'
-//         };
-//         setMessages([welcomeMessage]);
-//       }
-//     } else {
-//       setMessages([]);
-//       setRecommendations([]);
-//       setMood(null);
-//     }
-//   }, [user]);
-
-//   // Save messages to sessionStorage whenever they change
-//   useEffect(() => {
-//     if (user && messages.length > 0) {
-//       sessionStorage.setItem(`chat_messages_${user._id}`, JSON.stringify(messages));
-//     }
-//   }, [messages, user]);
-  
-//   // Save recommendations to sessionStorage whenever they change
-//   useEffect(() => {
-//     if (user && recommendations.length > 0) {
-//       sessionStorage.setItem(`recommendations_${user._id}`, JSON.stringify(recommendations));
-//       if (mood) {
-//         sessionStorage.setItem(`mood_${user._id}`, mood);
-//       }
-//     }
-//   }, [recommendations, mood, user]);
-
-//   // Voice recognition setup
-//   useEffect(() => {
-//     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-//     if (SpeechRecognition) {
-//       recognitionRef.current = new SpeechRecognition();
-//       recognitionRef.current.continuous = false;
-//       recognitionRef.current.interimResults = false;
-//       recognitionRef.current.lang = 'en-US';
-//       recognitionRef.current.onresult = (event) => {
-//         const transcript = event.results[0][0].transcript;
-//         setInput(transcript);
-//       };
-//       recognitionRef.current.onend = () => {
-//         setIsListening(false);
-//       };
-//     } else {
-//       console.warn('Speech Recognition not supported in this browser.');
-//     }
-//   }, []);
-
-//   // Set up scroll observer
-//   useEffect(() => {
-//     observerRef.current = new IntersectionObserver(
-//       ([entry]) => { isAtBottomRef.current = entry.isIntersecting; },
-//       { threshold: 0.1 }
-//     );
-//     if (messagesEndRef.current) observerRef.current.observe(messagesEndRef.current);
-//     return () => observerRef.current?.disconnect();
-//   }, []);
-
-//   // Auto-scroll to bottom when messages update
-//   useEffect(() => {
-//     if (isAtBottomRef.current && messagesEndRef.current) {
-//       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-//     }
-//   }, [messages]);
-
-//   // --- Resizer logic ---
-//   useEffect(() => {
-//     const handleMouseMove = (e) => {
-//       if (!isDraggingRef.current) return;
-//       const min = 320;
-//       const max = Math.max(window.innerWidth * 0.7, min);
-//       let newWidth = e.clientX;
-//       if (newWidth < min) newWidth = min;
-//       if (newWidth > max) newWidth = max;
-//       setChatWidth(newWidth);
-//     };
-//     const handleMouseUp = () => {
-//       isDraggingRef.current = false;
-//       document.body.style.cursor = '';
-//     };
-//     window.addEventListener('mousemove', handleMouseMove);
-//     window.addEventListener('mouseup', handleMouseUp);
-//     return () => {
-//       window.removeEventListener('mousemove', handleMouseMove);
-//       window.removeEventListener('mouseup', handleMouseUp);
-//     };
-//   }, []);
-//   const startDragging = (e) => {
-//     isDraggingRef.current = true;
-//     document.body.style.cursor = 'col-resize';
-//   };
-
-//   const handleVoiceInput = () => {
-//     if (recognitionRef.current) {
-//       setIsListening(true);
-//       recognitionRef.current.start();
-//     }
-//   };
-
-//   // Fetch user playlists
-//   const fetchPlaylists = async () => {
-//     if (!userId) return;
-//     try {
-//       const response = await fetch(`http://localhost:3000/api/playlists/my-playlists`, {
-//         headers: getAuthHeader()
-//       });
-//       if (response.ok) setPlaylists(await response.json());
-//     } catch (error) {
-//       console.error("Error fetching playlists:", error);
-//     }
-//   };
-//   //Autoplay Feature
-//     const handleTrackEnded = (index) => {
-//       console.log('Track ended called with index:', index);
-//       console.log('Autoplay conditions:', {
-//         autoplayEnabled,
-//         index,
-//         recommendationsLength: recommendations.length
-//       });
-  
-//       if (autoplayEnabled && index !== null && index < recommendations.length - 1) {
-//         const nextIndex = index + 1;
-//         console.log(`Attempting to play next track: ${nextIndex}`);
-        
-//         // Use a slight delay to ensure smooth transition
-//         setTimeout(() => {
-//           setCurrentPlayingIndex(nextIndex);
-//         }, 500);
-//       } else {
-//         console.log('Autoplay not triggered due to conditions');
-//       }
-//     };
-
-//   const startPlayingTrack=(index)=>{
-//     setCurrentPlayingIndex(index);
-//     // Get the current track's duration in milliseconds
-//   const currentTrack = recommendations[index];
-//   if (currentTrack && currentTrack.duration && autoplayEnabled) {
-//     // Add a small buffer (e.g., 500ms) to ensure the track completes
-//     const timeoutDuration = currentTrack.duration + 500;
-    
-//     // Clear any existing timeout
-//     if (autoplayTimeoutRef.current) {
-//       clearTimeout(autoplayTimeoutRef.current);
-//     }
-    
-//     // Set a new timeout to play the next track
-//     autoplayTimeoutRef.current = setTimeout(() => {
-//       if (index < recommendations.length - 1) {
-//         setCurrentPlayingIndex(index + 1);
-//       }
-//     }, timeoutDuration);
-//   }
-//   }
-//   const extractSpotifyTrackId = (spotifyString) => {
-//     if (!spotifyString) return null;
-    
-//     try {
-//       // Handle URI format (spotify:track:xyz)
-//       let matches = spotifyString.match(/spotify:track:([a-zA-Z0-9]+)/);
-//       if (matches && matches[1]) return matches[1];
-      
-//       // Handle URL format with query parameters (https://open.spotify.com/track/xyz?si=abc)
-//       matches = spotifyString.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)(\?|$)/);
-//       if (matches && matches[1]) return matches[1];
-      
-//       // Handle direct ID (if already extracted)
-//       if (/^[a-zA-Z0-9]{22}$/.test(spotifyString)) return spotifyString;
-      
-//       return null;
-//     } catch (error) {
-//       console.error("Error extracting Spotify track ID:", error);
-//       return null;
-//     }
-//   };
-  
-
-//   // Mood color mapping based on medical research
-//   const moodColors = {
-//     happy: {
-//       primary: '#FFD700',
-//       secondary: '#FFA500',
-//       accent: '#FF6B6B',
-//       background: '#FFF5E6',
-//       text: '#2C3E50'
-//     },
-//     sad: {
-//       primary: '#3498DB',
-//       secondary: '#2980B9',
-//       accent: '#1ABC9C',
-//       background: '#E8F4F8',
-//       text: '#2C3E50'
-//     },
-//     angry: {
-//       primary: '#E74C3C',
-//       secondary: '#C0392B',
-//       accent: '#F39C12',
-//       background: '#FDF2F0',
-//       text: '#2C3E50'
-//     },
-//     calm: {
-//       primary: '#2ECC71',
-//       secondary: '#27AE60',
-//       accent: '#3498DB',
-//       background: '#E8F8F5',
-//       text: '#2C3E50'
-//     },
-//     anxious: {
-//       primary: '#9B59B6',
-//       secondary: '#8E44AD',
-//       accent: '#3498DB',
-//       background: '#F5EEF8',
-//       text: '#2C3E50'
-//     },
-//     stressed: {
-//       primary: '#1ABC9C',
-//       secondary: '#16A085',
-//       accent: '#3498DB',
-//       background: '#E8F8F5',
-//       text: '#2C3E50'
-//     },
-//     default: {
-//       primary: '#3b82f6',
-//       secondary: '#2563eb',
-//       accent: '#1DB954',
-//       background: '#181818',
-//       text: '#FFFFFF'
-//     }
-//   };
-
-//   const getMoodColors = () => {
-//     return moodColors[mood?.toLowerCase()] || moodColors.default;
-//   };
-
-//   // Handle sending a message
-//   const handleSendMessage = async () => {
-//     if (!input.trim()) return;
-//     if (!userId || userId.length !== 24) {
-//       setMessages(prev => [...prev, { text: 'Authentication error, please try again later.', sender: 'system' }]);
-//       return;
-//     }
-//     const userMessage = { text: input, sender: 'user' };
-//     setMessages(prev => [...prev, userMessage]);
-//     setInput('');
-//     try {
-//       const conversationHistory = messages.slice(-10);
-//       const response = await axios.post('http://localhost:3000/api/music/recommend/recommendations', {
-//         userId,
-//         message: input,
-//         conversationHistory
-//       });
-//       setMessages(prev => [...prev, { 
-//         text: response.data.response, 
-//         sender: 'assistant' 
-//       }]);
-//       if (response.data.recommendations && response.data.recommendations.length > 0) {
-//         setRecommendations(response.data.recommendations);
-//       }
-//       if (response.data.detectedMood) {
-//         setMood(response.data.detectedMood);
-//       }
-//     } catch (error) {
-//       console.error("Error getting recommendations:", error);
-//       setMessages(prev => [...prev, { 
-//         text: 'Sorry, I encountered an error. Please try again.', 
-//         sender: 'system' 
-//       }]);
-//     }
-//   };
-
-//   // Playlist management
-//   const handleAddToPlaylist = async (songId) => {
-//     if (!userId) {
-//       alert("User not authenticated. Please log in.");
-//       return;
-//     }
-//     setSelectedSongId(songId);
-//     await fetchPlaylists();
-//     setShowPlaylistModal(true);
-//   };
-
-//   const createNewPlaylist = async () => {
-//     if (!newPlaylistName.trim()) {
-//       alert("Please enter a playlist name");
-//       return;
-//     }
-//     try {
-//       const response = await fetch('http://localhost:3000/api/playlists/create', {
-//         method: 'POST',
-//         headers: getAuthHeader(),
-//         body: JSON.stringify({ userId, name: newPlaylistName })
-//       });
-//       if (!response.ok) throw new Error("Failed to create playlist.");
-//       const newPlaylist = await response.json();
-//       setPlaylists(prev => [...prev, newPlaylist]);
-//       setNewPlaylistName('');
-//       return newPlaylist._id;
-//     } catch (err) {
-//       console.error("Error creating playlist:", err);
-//       alert("Failed to create playlist. Please try again.");
-//       return null;
-//     }
-//   };
-
-//   const addSongToPlaylist = async (playlistId) => {
-//     if (!selectedSongId || !playlistId) return;
-//     try {
-//       const response = await fetch('http://localhost:3000/api/playlists/addsong', {
-//         method: "POST",
-//         headers: getAuthHeader(),
-//         body: JSON.stringify({ playlistId, songId: selectedSongId })
-//       });
-//       if (!response.ok) throw new Error("Failed to add song to playlist");
-//       const songToAdd=recommendations.find(song=> song.musicId===selectedSongId);
-
-//       //emit ads_song event to backend
-//       if(socket && connected){
-//         socket.emit('add_song',{
-//           playlistId,
-//           song:songToAdd,
-//           userId:user._id,
-//           username:user.name
-//         });
-//       }
-//       alert("Song added to playlist successfully!");
-//       setShowPlaylistModal(false);
-//       setSelectedSongId(null);
-//       await fetchPlaylists();
-//     } catch (err) {
-//       console.error("Error adding song:", err);
-//       alert("Failed to add song. Please try again.");
-//     }
-//   };
-
-//   const handleAddToNewPlaylist = async () => {
-//     const newPlaylistId = await createNewPlaylist();
-//     if (newPlaylistId) await addSongToPlaylist(newPlaylistId);
-//   };
-
-//   const renderRecommendations = () => {
-//     return recommendations.map((song, index) => (
-//       <RecommendationCard
-//         key={index}
-//         song={song}
-//         moodColors={getMoodColors()}
-//         onAddToPlaylist={handleAddToPlaylist}
-//         isCurrentlyPlaying={index === currentPlayingIndex}
-//         autoplayEnabled={autoplayEnabled}
-//         onTrackEnded={()=> handleTrackEnded(index)}
-//         onPlay={()=> startPlayingTrack(index)}
-//       />
-//     ));
-//   };
-//   const handleShuffle=()=>{
-//     const shuffled=[...recommendations];
-//     for(let i=shuffled.length-1;i>0;i--){
-//       let j=Math.floor(Math.random()*(i+1));
-//       [shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];
-//     }
-//     setRecommendations(shuffled);
-//   }
-  
-  
-
-//   return (
-//     <div className="sticky top-0 z-40 flex flex-col h-screen bg-[#181818] text-white">
-//       {/* Header */}
-//       <div className="bg-[#1e1e1e] shadow-md p-3 flex items-center border-b border-[#333]">
-//         <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center mr-3">
-//           <span className="font-bold text-xs text-white"><i className="fa-solid fa-music"></i></span>
-//         </div>
-//         <h1 className="text-xl font-semibold text-white">YOUR MUSIC</h1>
-        
-//         <div className="ml-auto">
-//           <button className="w-8 h-8 rounded-full bg-white text-[#181818] flex items-center justify-center">
-//             <span><i className="fa-solid fa-moon"></i></span>
-//           </button>
-//         </div>
-//       </div>
-//       {/* Main content area - side by side layout with draggable divider */}
-//       <div className="flex flex-grow overflow-hidden relative">
-//         {/* Chat Messages - Left side */}
-//         <div
-//           className="flex flex-col h-full overflow-hidden"
-//           style={{
-//             width: chatWidth,
-//             minWidth: 320,
-//             maxWidth: '70vw',
-//             transition: isDraggingRef.current ? 'none' : 'width 0.15s',
-//             background: '#181818'
-//           }}
-//         >
-//           <div className="flex-grow overflow-y-auto p-4 space-y-4">
-//             {messages.map((msg, index) => (
-//               <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-//                 <div className={`max-w-md p-3 rounded-lg ${
-//                   msg.sender === 'user' ? 'bg-white text-black shadow-[0_0_10px_rgba(255,255,255,0.2)]' :
-//                   msg.sender === 'ai' ? 'bg-blue-500 text-white' : 'bg-[#444] text-white'
-//                 }`}>
-//                   {msg.text}
-//                 </div>
-//               </div>
-//             ))}
-//             <div ref={messagesEndRef}></div>
-//           </div>
-//           {/* Input & Voice Button */}
-//           <div className="p-4 border-t border-[#333] bg-[#1e1e1e]">
-//             <div className="flex">
-//               <input
-//                 type="text"
-//                 value={input}
-//                 onChange={(e) => setInput(e.target.value)}
-//                 onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-//                 placeholder="Type your message or use the mic..."
-//                 className="flex-grow p-2 rounded-l bg-[#2a2a2a] text-white placeholder-gray-400 focus:outline-none"
-//               />
-//               <button
-//                 onClick={handleVoiceInput}
-//                 className={`px-4 bg-blue-600 text-white rounded-r hover:bg-blue-700 transition duration-200 ${
-//                   isListening ? 'animate-pulse' : ''
-//                 }`}
-//                 title="Click to speak"
-//               >
-//                 <i className="fa-solid fa-microphone"></i>
-//               </button>
-//             </div>
-//             {isListening && (
-//               <p className="text-center text-sm text-blue-400 animate-pulse mt-1">
-//                 Listening...
-//               </p>
-//             )}
-//           </div>
-//         </div>
-//         {/* Draggable Divider */}
-//         <div
-//           onMouseDown={startDragging}
-//           className={`w-2 cursor-col-resize bg-[#222] hover:bg-blue-600 transition-colors duration-150`}
-//           style={{
-//             zIndex: 10,
-//             userSelect: 'none'
-//           }}
-//         />
-//         {/* Recommendations section - Right side */}
-//         {recommendations.length > 0 && (
-//           <div
-//             className="flex flex-col border-l border-[#333] overflow-hidden"
-//             style={{
-//               width: `calc(100% - ${chatWidth + 8}px)`, // 8px for divider
-//               minWidth: 220,
-//               backgroundColor: getMoodColors().background
-//             }}
-//           >
-//             <div className="p-3 border-b border-[#333] shadow-md flex items-center justify-between">
-//               <h3 className="font-bold text-lg" style={{ color: getMoodColors().text }}>
-//                 Recommendations
-//               </h3>
-              
-//              <div className='flex items-center gap-4'>
-//               <span className="text-lg font-bold" style={{ color: getMoodColors().accent }}>
-//                 {recommendations.length} songs
-//               </span>
-//               <div className='flex items-center gap-2'> 
-//                   <button 
-//                     className={`px-3 py-1 rounded text-xs font-medium flex items-center ${
-//                       autoplayEnabled ? 'bg-green-500' : 'bg-gray-600'
-//                     }`}
-//                     onClick={() => setAutoplayEnabled(!autoplayEnabled)}
-//                     title={autoplayEnabled ? "Disable autoplay" : "Enable autoplay"}
-//                   >
-//                     <i className={`fa-solid fa-forward-step mr-1`}></i>
-//                     Autoplay: {autoplayEnabled ? "ON" : "OFF"}
-//                   </button>
-//               </div> 
-//               <div className='text-white-400 hover:text-green-500 transition-transform duration-300 hover:scale-130' onClick={handleShuffle}>
-//               <FontAwesomeIcon icon={faShuffle} />
-//               </div>
-//               </div>
-//             </div>
-
-          
-//           <div className="overflow-y-auto flex-grow p-3">
-//             {renderRecommendations()}
-//           </div>
-            
-//           </div>
-          
-//         )}
-//       </div>
-//       {/* Playlist Modal */}
-//       {showPlaylistModal && (
-//         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-//           <div className="bg-[#252525] p-6 rounded-lg w-80 max-w-md">
-//             <h3 className="text-xl font-semibold mb-4">Select a playlist</h3>
-//             {playlists.length > 0 ? (
-//               <div className="mb-4 max-h-60 overflow-y-auto">
-//                 <h4 className="text-gray-300 mb-2">Your playlists:</h4>
-//                 <ul className="space-y-2">
-//                   {playlists.map((playlist) => (
-//                     <li key={playlist._id} className="flex justify-between items-center">
-//                       <span>{playlist.name} ({playlist.songs?.length || 0} songs)</span>
-//                       <button
-//                         onClick={() => addSongToPlaylist(playlist._id)}
-//                         className="bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 text-sm"
-//                       >
-//                         Add
-//                       </button>
-//                     </li>
-//                   ))}
-//                 </ul>
-//               </div>
-//             ) : (
-//               <p className="mb-4 text-gray-400">You do not have any playlists yet.</p>
-//             )}
-//             <div className="border-t border-gray-600 pt-4 mt-4">
-//               <h4 className="text-gray-300 mb-2">Create new playlist</h4>
-//               <div className="flex space-x-2">
-//                 <input
-//                   type="text"
-//                   value={newPlaylistName}
-//                   onChange={(e) => setNewPlaylistName(e.target.value)}
-//                   placeholder="Enter playlist name"
-//                   className="flex-grow p-2 border border-[#444] rounded bg-[#333] text-white focus:outline-none"
-//                 />
-//                 <button
-//                   onClick={handleAddToNewPlaylist}
-//                   className="bg-green-500 text-white px-3 py-2 rounded hover:bg-green-600"
-//                 >
-//                   Create & add
-//                 </button>
-//               </div>
-//             </div>
-//             <div className="mt-6">
-//               <button
-//                 onClick={() => setShowPlaylistModal(false)}
-//                 className="w-full bg-gray-700 text-white py-2 rounded hover:bg-gray-600 transition"
-//               >
-//                 Cancel
-//               </button>
-//             </div>
-//           </div>
-//         </div>
-//       )}
-//     </div>
-//   );
-// }
-
-// export default Chatbot;
-
-
 import { faShuffle } from "@fortawesome/free-solid-svg-icons";
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import axios from 'axios';
-import { useContext, useEffect, useRef, useState } from 'react';
-import AuthContext from '../context/AuthContext';
-import { useSocket } from "../context/SocketContext";
-import RecommendationCard from './RecommendationCard';
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { useEffect, useRef, useState } from "react";
+import * as musicAPI from "../api/musicAPI.js";
+import * as playlistAPI from "../api/playlistAPI.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import { useSocket } from "../context/SocketContext.jsx";
+import useSpeechRecognition from "../hooks/useSpeechRecognition.js";
+import CrisisSupport from "./CrisisSupport.jsx";
+import RecommendationCard from "./RecommendationCard.jsx";
+import SessionCheckIn from "./SessionCheckIn.jsx";
 
 function Chatbot() {
-  // Context and state
-  const { user } = useContext(AuthContext);
-  const {socket,connected}=useSocket();
+  const { user } = useAuth();
+  const { addSong } = useSocket();
   const userId = user?._id;
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -651,37 +22,22 @@ function Chatbot() {
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [selectedSongId, setSelectedSongId] = useState(null);
   const [newPlaylistName, setNewPlaylistName] = useState('');
-  const [isListening, setIsListening] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  //Autoplay feature states
   const [currentPlayingIndex,setCurrentPlayingIndex]=useState(null);
   const [autoplayEnabled,setAutoplayEnabled]=useState(false);
+  const [playlistError, setPlaylistError] = useState(null);
+  const [support, setSupport] = useState(null);
+  const [session, setSession] = useState(null);
+  const [checkInPhase, setCheckInPhase] = useState(null);
 
-  // Refs
   const messagesEndRef = useRef(null);
   const observerRef = useRef(null);
   const isAtBottomRef = useRef(true);
-  const recognitionRef = useRef(null);
   const autoplayTimeoutRef = useRef(null);
 
-  // --- Resizable panel state ---
   const [chatWidth, setChatWidth] = useState(500); // px
   const isDraggingRef = useRef(false);
 
-  // Authentication header helper
-  const getAuthHeader = () => {
-    const token = sessionStorage.getItem('token');
-    if (!token) {
-      console.error("No authentication token found!");
-      return { 'Content-Type': 'application/json' };
-    }
-    return { 
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    };
-  };
-
-  // Load messages from sessionStorage when component mounts
   useEffect(() => {
     if (user) {
       const savedMessagesString = sessionStorage.getItem(`chat_messages_${user._id}`);
@@ -727,14 +83,12 @@ function Chatbot() {
     }
   }, [user]);
 
-  // Save messages to sessionStorage whenever they change
   useEffect(() => {
     if (user && messages.length > 0) {
       sessionStorage.setItem(`chat_messages_${user._id}`, JSON.stringify(messages));
     }
   }, [messages, user]);
   
-  // Save recommendations to sessionStorage whenever they change
   useEffect(() => {
     if (user && recommendations.length > 0) {
       sessionStorage.setItem(`recommendations_${user._id}`, JSON.stringify(recommendations));
@@ -744,27 +98,7 @@ function Chatbot() {
     }
   }, [recommendations, mood, user]);
 
-  // Voice recognition setup
-  useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
-      recognitionRef.current.lang = 'en-US';
-      recognitionRef.current.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        setInput(transcript);
-      };
-      recognitionRef.current.onend = () => {
-        setIsListening(false);
-      };
-    } else {
-      console.warn('Speech Recognition not supported in this browser.');
-    }
-  }, []);
 
-  // Set up scroll observer
   useEffect(() => {
     observerRef.current = new IntersectionObserver(
       ([entry]) => { isAtBottomRef.current = entry.isIntersecting; },
@@ -774,14 +108,12 @@ function Chatbot() {
     return () => observerRef.current?.disconnect();
   }, []);
 
-  // Auto-scroll to bottom when messages update
   useEffect(() => {
     if (isAtBottomRef.current && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
 
-  // --- Resizer logic ---
   useEffect(() => {
     const handleMouseMove = (e) => {
       if (!isDraggingRef.current) return;
@@ -804,32 +136,24 @@ function Chatbot() {
     };
   }, []);
 
-  const startDragging = (e) => {
+  const startDragging = () => {
     isDraggingRef.current = true;
     document.body.style.cursor = 'col-resize';
   };
 
-  const handleVoiceInput = () => {
-    if (recognitionRef.current) {
-      setIsListening(true);
-      recognitionRef.current.start();
-    }
-  };
+  const { listening: isListening, start: handleVoiceInput } = useSpeechRecognition({
+    onResult: setInput,
+  });
 
-  // Fetch user playlists
   const fetchPlaylists = async () => {
     if (!userId) return;
     try {
-      const response = await fetch(`http://localhost:3000/api/playlists/my-playlists`, {
-        headers: getAuthHeader()
-      });
-      if (response.ok) setPlaylists(await response.json());
+      setPlaylists(await playlistAPI.fetchMyPlaylists());
     } catch (error) {
-      console.error("Error fetching playlists:", error);
+      console.error("Error fetching playlists:", error.message);
     }
   };
 
-  //Autoplay Feature
   const handleTrackEnded = (index) => {
     console.log('Track ended called with index:', index);
     console.log('Autoplay conditions:', {
@@ -842,7 +166,6 @@ function Chatbot() {
       const nextIndex = index + 1;
       console.log(`Attempting to play next track: ${nextIndex}`);
       
-      // Use a slight delay to ensure smooth transition
       setTimeout(() => {
         setCurrentPlayingIndex(nextIndex);
       }, 500);
@@ -853,18 +176,14 @@ function Chatbot() {
 
   const startPlayingTrack=(index)=>{
     setCurrentPlayingIndex(index);
-    // Get the current track's duration in milliseconds
     const currentTrack = recommendations[index];
     if (currentTrack && currentTrack.duration && autoplayEnabled) {
-      // Add a small buffer (e.g., 500ms) to ensure the track completes
       const timeoutDuration = currentTrack.duration + 500;
       
-      // Clear any existing timeout
       if (autoplayTimeoutRef.current) {
         clearTimeout(autoplayTimeoutRef.current);
       }
       
-      // Set a new timeout to play the next track
       autoplayTimeoutRef.current = setTimeout(() => {
         if (index < recommendations.length - 1) {
           setCurrentPlayingIndex(index + 1);
@@ -873,29 +192,7 @@ function Chatbot() {
     }
   }
 
-  const extractSpotifyTrackId = (spotifyString) => {
-    if (!spotifyString) return null;
-    
-    try {
-      // Handle URI format (spotify:track:xyz)
-      let matches = spotifyString.match(/spotify:track:([a-zA-Z0-9]+)/);
-      if (matches && matches[1]) return matches[1];
-      
-      // Handle URL format with query parameters (https://open.spotify.com/track/xyz?si=abc)
-      matches = spotifyString.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]+)(\?|$)/);
-      if (matches && matches[1]) return matches[1];
-      
-      // Handle direct ID (if already extracted)
-      if (/^[a-zA-Z0-9]{22}$/.test(spotifyString)) return spotifyString;
-      
-      return null;
-    } catch (error) {
-      console.error("Error extracting Spotify track ID:", error);
-      return null;
-    }
-  };
 
-  // Mood color mapping based on medical research
   const moodColors = {
     happy: {
       primary: '#FFD700',
@@ -952,58 +249,70 @@ function Chatbot() {
     return moodColors[mood?.toLowerCase()] || moodColors.default;
   };
 
-  // Handle sending a message
   const handleSendMessage = async () => {
     if (!input.trim()) return;
-    if (!userId || userId.length !== 24) {
-      setMessages(prev => [...prev, { text: 'Authentication error, please try again later.', sender: 'system' }]);
+    if (!userId) {
+      setMessages((prev) => [
+        ...prev,
+        { text: "Please sign in to get recommendations.", sender: "system" },
+      ]);
       return;
     }
-    
-    const userMessage = { text: input, sender: 'user' };
-    setMessages(prev => [...prev, userMessage]);
-    setInput('');
+
+    const userMessage = { text: input, sender: "user" };
+    setMessages((prev) => [...prev, userMessage]);
+    setInput("");
     setIsTyping(true);
-    
+    setSupport(null);
+
     try {
-      const conversationHistory = messages.slice(-10);
-      const response = await axios.post('http://localhost:3000/api/music/recommend/recommendations', {
-        userId,
+      const result = await musicAPI.fetchRecommendations({
         message: userMessage.text,
-        conversationHistory
+        conversationHistory: messages.slice(-10),
       });
-      
-      setTimeout(() => {
-        setIsTyping(false);
-        setMessages(prev => [...prev, { 
-          text: response.data.response, 
-          sender: 'assistant' 
-        }]);
-        
-        if (response.data.recommendations && response.data.recommendations.length > 0) {
-          setRecommendations(response.data.recommendations);
-        }
-        if (response.data.detectedMood) {
-          setMood(response.data.detectedMood);
-        }
-      }, 1000);
-      
-    } catch (error) {
-      console.error("Error getting recommendations:", error);
+
       setIsTyping(false);
-      setMessages(prev => [...prev, { 
-        text: 'Sorry, I encountered an error. Please try again.', 
-        sender: 'system' 
-      }]);
+      setMessages((prev) => [...prev, { text: result.response, sender: "assistant" }]);
+
+      // Support contacts accompany an elevated-risk reply and replace the reply
+      // entirely at crisis level, where the server returns no recommendations.
+      if (result.supportResources?.length) {
+        setSupport({
+          level: result.riskLevel,
+          resources: result.supportResources,
+          notice: result.emergencyNotice,
+        });
+      }
+
+      if (result.recommendations?.length) {
+        setRecommendations(result.recommendations);
+        setSession(result.sessionId ?? null);
+        setCheckInPhase(result.sessionId ? "before" : null);
+      }
+      if (result.detectedMood) setMood(result.detectedMood);
+    } catch (error) {
+      setIsTyping(false);
+      setMessages((prev) => [
+        ...prev,
+        { text: `Sorry, I could not get recommendations: ${error.message}`, sender: "system" },
+      ]);
     }
   };
 
-  // Playlist management
+  /** Saves every recommendation at once, instead of one modal trip per song. */
+  const handleSaveAll = async () => {
+    if (!recommendations.length) return;
+
+    setPlaylistError(null);
+    setSelectedSongId("__all__");
+    await fetchPlaylists();
+    setShowPlaylistModal(true);
+  };
+
   const handleAddToPlaylist = async (songId) => {
-    if (!userId) {
-      alert("User not authenticated. Please log in.");
-      return;
-    }
+    if (!userId) return;
+
+    setPlaylistError(null);
     setSelectedSongId(songId);
     await fetchPlaylists();
     setShowPlaylistModal(true);
@@ -1011,78 +320,57 @@ function Chatbot() {
 
   const createNewPlaylist = async () => {
     if (!newPlaylistName.trim()) {
-      alert("Please enter a playlist name");
-      return;
+      setPlaylistError("Please enter a playlist name");
+      return null;
     }
+
     try {
-      const response = await fetch('http://localhost:3000/api/playlists/create', {
-        method: 'POST',
-        headers: getAuthHeader(),
-        body: JSON.stringify({ userId, name: newPlaylistName })
-      });
-      if (!response.ok) throw new Error("Failed to create playlist.");
-      const newPlaylist = await response.json();
-      setPlaylists(prev => [...prev, newPlaylist]);
-      setNewPlaylistName('');
-      return newPlaylist._id;
-    } catch (err) {
-      console.error("Error creating playlist:", err);
-      alert("Failed to create playlist. Please try again.");
+      const created = await playlistAPI.createPlaylist(newPlaylistName);
+      setPlaylists((prev) => [...prev, created]);
+      setNewPlaylistName("");
+      return created._id;
+    } catch (error) {
+      setPlaylistError(error.message);
       return null;
     }
   };
 
   const addSongToPlaylist = async (playlistId) => {
-  if (!selectedSongId || !playlistId) return;
-  
-  try {
-    const response = await fetch('http://localhost:3000/api/playlists/addsong', {
-      method: "POST",
-      headers: getAuthHeader(),
-      body: JSON.stringify({ playlistId, songId: selectedSongId })
-    });
-    
-    const data = await response.json();
-    
-    if (response.status === 409 && data.type === 'duplicate_song') {
-      // Song already exists in playlist
-      alert(`"${data.songTitle}" by ${data.artist} is already in "${data.playlistName}"`);
+    if (!selectedSongId || !playlistId) return;
+
+    const targets =
+      selectedSongId === "__all__"
+        ? recommendations.map((song) => song.musicId)
+        : [selectedSongId];
+
+    try {
+      // Settled rather than all: one duplicate song must not abort the rest.
+      const results = await Promise.allSettled(
+        targets.map((songId) => playlistAPI.addSong({ playlistId, songId }))
+      );
+
+      const failures = results.filter((r) => r.status === "rejected");
+      const savedCount = results.length - failures.length;
+
+      recommendations
+        .filter((song) => targets.includes(song.musicId))
+        .forEach((song) => addSong(playlistId, song));
+
+      if (failures.length && savedCount === 0) {
+        setPlaylistError(failures[0].reason?.message ?? "Could not save");
+        return;
+      }
+
+      setPlaylistError(
+        failures.length ? `Saved ${savedCount}, skipped ${failures.length} already present` : null
+      );
       setShowPlaylistModal(false);
       setSelectedSongId(null);
-      return;
+      await fetchPlaylists();
+    } catch (error) {
+      setPlaylistError(error.message);
     }
-    
-    if (!response.ok) {
-      throw new Error(data.message || "Failed to add song to playlist");
-    }
-    
-    const songToAdd = recommendations.find(song => song.musicId === selectedSongId);
-    
-    // Emit add_song event to backend
-    if (socket && connected) {
-      socket.emit('add_song', {
-        playlistId,
-        song: songToAdd,
-        userId: user._id,
-        username: user.name
-      });
-    }
-    
-    // Show success message with song details
-    const successMessage = data.addedSong 
-      ? `"${data.addedSong.title}" by ${data.addedSong.artist} added successfully!`
-      : "Song added to playlist successfully!";
-    
-    alert(successMessage);
-    setShowPlaylistModal(false);
-    setSelectedSongId(null);
-    await fetchPlaylists();
-    
-  } catch (err) {
-    console.error("Error adding song:", err);
-    alert(err.message || "Failed to add song. Please try again.");
-  }
-};
+  };
 
   const handleAddToNewPlaylist = async () => {
     const newPlaylistId = await createNewPlaylist();
@@ -1098,6 +386,8 @@ function Chatbot() {
       >
         <RecommendationCard
           song={song}
+          sessionId={session}
+          moodAtTime={mood}
           moodColors={getMoodColors()}
           onAddToPlaylist={handleAddToPlaylist}
           isCurrentlyPlaying={index === currentPlayingIndex}
@@ -1201,6 +491,15 @@ function Chatbot() {
               </div>
             )}
             
+            {support && (
+              <CrisisSupport
+                level={support.level}
+                resources={support.resources}
+                notice={support.notice}
+                onDismiss={() => setSupport(null)}
+              />
+            )}
+
             <div ref={messagesEndRef}></div>
           </div>
 
@@ -1294,7 +593,34 @@ function Chatbot() {
 
             {/* Recommendations List */}
             <div className="overflow-y-auto flex-grow p-6 space-y-4 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
+              {session && checkInPhase && (
+                <SessionCheckIn
+                  sessionId={session}
+                  phase={checkInPhase}
+                  onComplete={() => setCheckInPhase(checkInPhase === "before" ? null : null)}
+                  onSkip={() => setCheckInPhase(null)}
+                />
+              )}
+
+              <button
+                type="button"
+                onClick={handleSaveAll}
+                className="w-full rounded-2xl border border-white/20 bg-white/5 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+              >
+                <i className="fa-solid fa-bookmark mr-2" aria-hidden="true" />
+                Save all {recommendations.length} to a playlist
+              </button>
+
               {renderRecommendations()}
+
+              {session && checkInPhase === null && (
+                <SessionCheckIn
+                  sessionId={session}
+                  phase="after"
+                  onComplete={() => setSession(null)}
+                  onSkip={() => setSession(null)}
+                />
+              )}
             </div>
           </div>
         )}
@@ -1310,6 +636,12 @@ function Chatbot() {
               </div>
               <h3 className="text-xl font-light text-white">Add to Playlist</h3>
             </div>
+
+            {playlistError && (
+              <p role="alert" className="mb-4 text-sm text-red-300">
+                {playlistError}
+              </p>
+            )}
             
             {playlists.length > 0 ? (
               <div className="mb-6 max-h-60 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
@@ -1446,5 +778,4 @@ function Chatbot() {
 }
 
 export default Chatbot;
-
 

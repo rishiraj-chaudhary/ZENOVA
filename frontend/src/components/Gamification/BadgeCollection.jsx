@@ -14,15 +14,6 @@ const BadgeCollection = ({ limit = 5, className = "" }) => {
         }
     };
 
-    const getRarityGlow = (rarity) => {
-        switch (rarity) {
-            case 'legendary': return 'shadow-yellow-400/50';
-            case 'epic': return 'shadow-purple-400/50';
-            case 'rare': return 'shadow-blue-400/50';
-            case 'common': return 'shadow-gray-400/30';
-            default: return 'shadow-gray-400/30';
-        }
-    };
 
     const getRarityBorder = (rarity) => {
         switch (rarity) {

@@ -1,97 +1,55 @@
-import { useCallback, useContext, useEffect, useState } from 'react';
-import AuthContext from '../context/AuthContext';
-import { useSocket } from '../context/SocketContext';
-const CollaboratorsList=({playlistId,isOwner})=>{
-    const [collaborators,setCollaborators]=useState([]);
-    const [loading,setLoading]=useState(true);
-    const {user} =useContext(AuthContext);
-    const {socket,notifyCollaboratorRemoved}=useSocket();
+import { useCallback, useEffect, useState } from "react";
+import * as playlistAPI from "../api/playlistAPI.js";
+import { useSocket } from "../context/SocketContext.jsx";
+import useSocketEvents from "../hooks/useSocketEvents.js";
+
+const CollaboratorsList = ({ playlistId, isOwner }) => {
+    const { notifyCollaboratorRemoved } = useSocket();
+    const [collaborators, setCollaborators] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const getAuthHeaders = useCallback(() => ({
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${sessionStorage.getItem('token') || localStorage.getItem('token') || ''}`
-    }), []);
-    //Fetch Collaborators
-    const fetchCollaborators=useCallback(async()=>{
-        try{
-            setLoading(true);
-            const response=await fetch(`http://localhost:3000/api/playlists/${playlistId}/collaborators`,{
-                headers:getAuthHeaders()
-            });
-            if(!response.ok){
-                throw new Error('Failed to fetch collaborators');
-            }
-            const data=await response.json();
-            setCollaborators(data.collaborators || []);
+
+    const fetchCollaborators = useCallback(async () => {
+        try {
+            const { collaborators: list } = await playlistAPI.fetchCollaborators(playlistId);
+            setCollaborators(list);
             setError(null);
-        }catch(err){
-            setError('Failed to load collaborators')
-            console.log(err);
-        }finally{
+        } catch (fetchError) {
+            setError(fetchError.message);
+        } finally {
             setLoading(false);
         }
-    },[playlistId,getAuthHeaders]);
+    }, [playlistId]);
 
-    //Remove a collaborator
-    const removeCollaborator= async(userId,username)=>{
-        if(!isOwner){
-            return;
-        }
-        try{
-            setLoading(true);
-            const response=await fetch(`http://localhost:3000/api/playlists/${playlistId}/collaborators/${userId}`,{
-                method:'DELETE',
-                headers: getAuthHeaders()
-            });
-            if(!response.ok){
-                throw new Error('Failed to remove collaborator');
-            }
-            //Emit socket event
-            notifyCollaboratorRemoved(playlistId,userId,username);
-            setCollaborators(collaborators.filter(c=> c._id !==userId));
-            setError(null);
-        }catch(err){
-            setError('Failed to remove collaborator');
-        }finally{
-            setLoading(false);
-        }
-    }
-    
-    //Listen for socket events
-    useEffect(()=>{
-        if(!socket){
-            return;
-        }
-        const handleCollaboratorAdded=(data)=>{
-            if(data.playlistId===playlistId){
-                console.log('Collaborator added event received');
-                fetchCollaborators();
-            }
-        };
-        const handleCollaboratorRemoved=(data)=>{
-            if (data.playlistId === playlistId) {
-                console.log('Collaborator removed event received');
-                fetchCollaborators();
-            }
-        }
-
-        socket.on('collaborator_added', handleCollaboratorAdded);
-        socket.on('collaborator_removed', handleCollaboratorRemoved);
-
-        return () => {
-            socket.off('collaborator_added', handleCollaboratorAdded);
-            socket.off('collaborator_removed', handleCollaboratorRemoved);
-        };
-
-        
-    },[socket,playlistId,fetchCollaborators]);
-
-    //Fetch all collaborators on mount and when playlistId changes
     useEffect(() => {
-        if (playlistId) {
-            fetchCollaborators();
+        if (playlistId) fetchCollaborators();
+    }, [playlistId, fetchCollaborators]);
+
+    // Only react to events for the playlist this list is showing.
+    const refreshIfSamePlaylist = (data) => {
+        if (data.playlistId === playlistId) fetchCollaborators();
+    };
+
+    useSocketEvents({
+        collaborator_added: refreshIfSamePlaylist,
+        collaborator_removed: refreshIfSamePlaylist,
+    });
+
+    const removeCollaborator = async (userId, username) => {
+        if (!isOwner) return;
+
+        try {
+            setLoading(true);
+            await playlistAPI.removeCollaborator({ playlistId, userId });
+            notifyCollaboratorRemoved(playlistId, userId, username);
+            setCollaborators((current) => current.filter((c) => c._id !== userId));
+            setError(null);
+        } catch (removeError) {
+            setError(removeError.message);
+        } finally {
+            setLoading(false);
         }
-    }, [playlistId,fetchCollaborators]);
+    };
 
     if(collaborators.length===0 && !loading){
         return null;

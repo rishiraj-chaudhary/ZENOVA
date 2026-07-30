@@ -1,117 +1,120 @@
-
-import { LEVELS, POINTS } from '../config/gamification.js';
+import { LEVELS, POINTS } from "../config/gamification.js";
 import Gamification from "../models/Gamification.js";
-import { updateLeaderboard } from './leaderboardService.js';
-export const calculateLevel=(totalPoints)=>{
-    let level=1;
-    for(const levelData of LEVELS){
-        if(totalPoints >= levelData.minPoints){
-            level=levelData.level;
-        }
-    }
-    return level;
-}
-export const awardPoints=async(userId,action,socketManager,metadata={})=>{
-    console.log(`awardPoints called for user ${userId} and action ${action}`);
-    try{
-        const points=POINTS[action.toUpperCase()] || 0;
-        let userGamification=await Gamification.findOne({userId});
-        if(!userGamification){
-            userGamification=new Gamification({userId});
-        }
-        //Add points 
-        userGamification.totalPoints+=points;
-        console.log('5 points for login');
-        //Check level up
-        const newLevel=calculateLevel(userGamification.totalPoints);
-        const leveledUp=newLevel > userGamification.level;
-        userGamification.level=newLevel;
-        //Update tracking counters based on action
-        switch(action.toUpperCase()){
-            case 'PLAYLIST_SHARED':
-                userGamification.playlistsShared = (userGamification.playlistsShared || 0) + 1;
-                break;
-            case 'DAILY_LOGIN':
-                userGamification.dailyLogins = (userGamification.dailyLogins || 0) + 1;
-                break;
-            case 'PLAYLIST_CREATED':
-                userGamification.playlistsCreated = (userGamification.playlistsCreated || 0) + 1;
-                break;
-            case 'SONG_ADDED':
-                userGamification.songsAdded = (userGamification.songsAdded || 0) + 1;
-                break;
-        }
+import { scheduleLeaderboardRefresh } from "./leaderboardService.js";
 
-        //Update last activity for streak tracking
-        // userGamification.lastActivity=new Date();
-        await userGamification.save();
-        //Real time update via websockets
-        if(socketManager && socketManager.emitToUser){
-            console.log('Emitting points_awarded for', userId);
-            socketManager.emitToUser(userId,'points_awarded',{
-                points,
-                action,
-                totalPoints: userGamification.totalPoints,
-                level: userGamification.level,
-                leveledUp
-            })
-        }
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-        if (leveledUp) {
-        console.log('Emitting level_up for', userId);
-        socketManager.emitToUser(userId, 'level_up', {
-            
-            level: userGamification.level,
-            totalPoints: userGamification.totalPoints
-        });
-        }
-        await updateLeaderboard('alltime','all');
-        return {points,totalPoints:userGamification.totalPoints,leveledUp};
-    }catch(err){
-        console.error('Error awarding points:', err);
-        throw err;
+/** Counters incremented alongside points, keyed by action. */
+const ACTION_COUNTERS = {
+  PLAYLIST_SHARED: "playlistsShared",
+  PLAYLIST_CREATED: "playlistsCreated",
+  SONG_ADDED: "songsAdded",
+  DAILY_LOGIN: "dailyLogins",
+};
+
+export const calculateLevel = (totalPoints) =>
+  LEVELS.reduce(
+    (highest, level) => (totalPoints >= level.minPoints ? level.level : highest),
+    1
+  );
+
+const findOrCreateStats = async (userId) =>
+  (await Gamification.findOne({ userId })) ?? new Gamification({ userId });
+
+const emit = (socketManager, userId, event, payload) => {
+  socketManager?.emitToUser?.(userId, event, payload);
+};
+
+export const awardPoints = async (userId, action, socketManager) => {
+  const normalizedAction = action.toUpperCase();
+  const points = POINTS[normalizedAction] ?? 0;
+
+  const stats = await findOrCreateStats(userId);
+  const previousLevel = stats.level;
+
+  stats.totalPoints += points;
+  stats.level = calculateLevel(stats.totalPoints);
+
+  const counter = ACTION_COUNTERS[normalizedAction];
+  if (counter) stats[counter] = (stats[counter] ?? 0) + 1;
+
+  await stats.save();
+
+  const leveledUp = stats.level > previousLevel;
+
+  emit(socketManager, userId, "points_awarded", {
+    points,
+    action: normalizedAction,
+    totalPoints: stats.totalPoints,
+    level: stats.level,
+    leveledUp,
+  });
+
+  if (leveledUp) {
+    emit(socketManager, userId, "level_up", {
+      level: stats.level,
+      totalPoints: stats.totalPoints,
+    });
+  }
+
+  // All three boards read the same stats, so all three stay current.
+  scheduleLeaderboardRefresh("alltime");
+  scheduleLeaderboardRefresh("monthly");
+  scheduleLeaderboardRefresh("weekly");
+
+  return { points, totalPoints: stats.totalPoints, level: stats.level, leveledUp };
+};
+
+const daysBetween = (later, earlier) =>
+  Math.floor((later.getTime() - earlier.getTime()) / MS_PER_DAY);
+
+/** Missing this many days or fewer is forgiven once per grace period. */
+const STREAK_GRACE_DAYS = 2;
+const GRACE_COOLDOWN_DAYS = 14;
+
+const graceAvailable = (stats, now) =>
+  !stats.lastGraceUsedAt ||
+  daysBetween(now, stats.lastGraceUsedAt) >= GRACE_COOLDOWN_DAYS;
+
+/**
+ * Advances the daily streak. Same-day activity is a no-op, the next calendar
+ * day extends the streak, and a longer gap resets it.
+ *
+ * A short gap is forgiven once per fortnight. In a wellbeing context a broken
+ * streak lands as personal failure at exactly the moment someone was already
+ * struggling — the grace period keeps the habit loop without that penalty.
+ */
+export const updateStreak = async (userId, socketManager) => {
+  const stats = await findOrCreateStats(userId);
+  const now = new Date();
+
+  const isFirstActivity = !stats.lastActivity || stats.currentStreak === 0;
+  const elapsedDays = isFirstActivity ? null : daysBetween(now, stats.lastActivity);
+  let graceUsed = false;
+
+  if (isFirstActivity) {
+    stats.currentStreak = 1;
+  } else if (elapsedDays === 1) {
+    stats.currentStreak += 1;
+  } else if (elapsedDays > 1) {
+    if (elapsedDays <= STREAK_GRACE_DAYS + 1 && graceAvailable(stats, now)) {
+      stats.currentStreak += 1;
+      stats.lastGraceUsedAt = now;
+      graceUsed = true;
+    } else {
+      stats.currentStreak = 1;
     }
-}
-//Update user streak based on daily activity
-export const updateStreak=async(userId,socketManager)=>{
-    console.log(`updateStreak called for user ${userId}`);
-    try{
-        let userGamification=await Gamification.findOne({userId});
-        if(!userGamification){
-            userGamification=new Gamification({userId});
-        }
-        const now=new Date();
-        const lastActivity=new Date(userGamification.lastActivity);
-        const timeDiff=now.getTime()-lastActivity.getTime();
-        const daysDiff=Math.floor(timeDiff / (1000*3600*24));
-        if(!lastActivity || userGamification.currentStreak===0){
-            //First ever login or streak is reset
-            userGamification.currentStreak=1;
-            userGamification.longestStreak=Math.max(userGamification.longestStreak || 0,1);
-        }else if(daysDiff===1){
-            //consecutive day--> increment the streak
-            userGamification.currentStreak+=1;
-            if(userGamification.currentStreak>userGamification.longestStreak){
-                userGamification.longestStreak=userGamification.currentStreak;
-            }
-        }else if(daysDiff > 1){
-            //Streak is broken
-            userGamification.currentStreak=1;
-        }
-        //daysDiff==0 ==> no change as it is the same day
-        userGamification.lastActivity=now;
-        await userGamification.save();
-        //Emit streak update
-        if(socketManager && socketManager.emitToUser){
-            console.log('Emitting streak_updated for', userId);
-            socketManager.emitToUser(userId,'streak_updated',{
-                currentStreak:userGamification.currentStreak,
-                longestStreak:userGamification.longestStreak
-            });
-        }
-        return userGamification.currentStreak;
-    }catch(err){
-        console.error('Error updating streak:', err);
-        throw err;
-    }
-}
+  }
+
+  stats.longestStreak = Math.max(stats.longestStreak ?? 0, stats.currentStreak);
+  stats.lastActivity = now;
+  await stats.save();
+
+  emit(socketManager, userId, "streak_updated", {
+    currentStreak: stats.currentStreak,
+    longestStreak: stats.longestStreak,
+    graceUsed,
+  });
+
+  return stats.currentStreak;
+};

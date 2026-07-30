@@ -1,21 +1,13 @@
+# The workspace root already scripts install/build/start for both packages, so
+# the previous per-directory cd chain is no longer needed.
 [variables]
-NODE_VERSION = "18"
-NPM_VERSION = "8"
+NODE_VERSION = "20"
+
+[phases.install]
+cmds = ["npm install --workspaces --include-workspace-root"]
 
 [phases.build]
-cmds = [
-  "echo 'Building ZENOVA Music Therapy Platform...'",
-  "echo 'Installing frontend dependencies...'",
-  "cd frontend && npm install",
-  "echo 'Building React frontend...'", 
-  "cd frontend && npm run build",
-  "echo 'Installing backend dependencies...'",
-  "cd backend && npm install",
-  "echo 'Build completed successfully!'"
-]
+cmds = ["npm run build"]
 
-[phases.start]
-cmd = "cd backend && npm start"
-
-[staticAssets]
-publicDir = "frontend/dist"
+[start]
+cmd = "npm start"

@@ -84,7 +84,6 @@ function gamificationReducer(state,action){
 export function GamificationProvider({children}){
     const {socket}=useSocket();
     const [state,dispatch]=useReducer(gamificationReducer,initialState);
-    //dispatch--> the function used to send actions to the reducer (gamificationreducer), which updates the state 
     useEffect(()=>{
         if(!socket){
             return;

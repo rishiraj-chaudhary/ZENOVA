@@ -1,43 +1,49 @@
-import { useEffect, useState } from 'react';
-import { useGamification } from '../../context/GamificationContext';
+import { useEffect, useState } from "react";
+import { useGamification } from "../../context/GamificationContext.jsx";
 
-const NotificationToast=()=>{
-    const {state,dispatch}=useGamification();
-    const [visible,setVisible]=useState(false);
-    const [currentNotification,setCurrentNotification]=useState(null);
-     // Debug logs
-    console.log("Notifications in state:", state.notifications);
-    console.log("Current notification:", currentNotification);
-    console.log("Visible:", visible);
-    // useEffect(()=>{
-    //     const latestNotification=state.notifications[state.notifications.length-1];
-    //     if(latestNotification && latestNotification !== currentNotification){
-    //         setCurrentNotification(latestNotification);
-    //         setVisible(true);
-    //         //Auto dismiss after 3 sec
-    //         setTimeout(()=>{
-    //             setVisible(false);
-    //                 setTimeout(()=>{
-    //                     dispatch({type:'DISMISS_NOTIFICATION',id:latestNotification.id});
-    //                 }, 300);
-    //         }, 4000);
-    //     }
-    // },[state.notifications,currentNotification,dispatch]);
+const DISPLAY_MS = 4000;
+const FADE_MS = 300;
+
+const NotificationToast = () => {
+    const { state, dispatch } = useGamification();
+    const [visible, setVisible] = useState(false);
+    const [currentNotification, setCurrentNotification] = useState(null);
+
+    /**
+     * Shows one queued notification at a time. Both timers are cleared on
+     * cleanup — the previous version left them running, so a notification
+     * arriving during a fade could dismiss the wrong entry after unmount.
+     */
     useEffect(() => {
-      // if(!visible || !currentNotification){
-      //   return null;
-      // }
-    if (!visible && state.notifications.length > 0) {
-        setCurrentNotification(state.notifications[0]);
+        const [next] = state.notifications;
+        if (visible || !next) return undefined;
+
+        setCurrentNotification(next);
         setVisible(true);
-        setTimeout(() => {
+
+        let fadeTimer;
+        const hideTimer = setTimeout(() => {
             setVisible(false);
-            setTimeout(() => {
-                dispatch({ type: 'DISMISS_NOTIFICATION', id: state.notifications[0].id });
-            }, 300);
-        }, 4000);
-    }
-}, [state.notifications, visible, dispatch]);
+            fadeTimer = setTimeout(
+                () => dispatch({ type: "DISMISS_NOTIFICATION", id: next.id }),
+                FADE_MS
+            );
+        }, DISPLAY_MS);
+
+        return () => {
+            clearTimeout(hideTimer);
+            clearTimeout(fadeTimer);
+        };
+    }, [state.notifications, visible, dispatch]);
+
+    const dismissNow = () => {
+        setVisible(false);
+        if (currentNotification) {
+            dispatch({ type: "DISMISS_NOTIFICATION", id: currentNotification.id });
+            setCurrentNotification(null);
+        }
+    };
+
     const getNotificationColor = (type) => {
         switch (type) {
             case 'points': return 'from-green-500 to-emerald-600';
@@ -86,15 +92,7 @@ const NotificationToast=()=>{
             <p className="text-white font-medium text-sm">{currentNotification.message}</p>
           </div>
           <button 
-            onClick={() =>{
-              setVisible(false);
-              setTimeout(()=>{
-                  if(currentNotification){
-                      dispatch({type : 'DISMISS_NOTIFICATION' , id : currentNotification.id});
-                      setCurrentNotification(null);
-                    }
-                  },300);
-            }}
+            onClick={dismissNow}
             className="w-6 h-6 bg-white/20 rounded-lg flex items-center justify-center hover:bg-white/30 transition-colors duration-200"
           >
             <i className="fa-solid fa-times text-white text-xs"></i>

@@ -1,155 +1,145 @@
+import compression from "compression";
+import MongoStore from "connect-mongo";
 import cors from "cors";
-import dotenv from "dotenv";
 import express from "express";
-import "express-async-errors";
-import path from 'path';
-import { fileURLToPath } from 'url';
-import session from 'express-session';
-import http from 'http';
-import { Server } from 'socket.io';
+import mongoSanitize from "express-mongo-sanitize";
+import session from "express-session";
+import helmet from "helmet";
+import http from "http";
+import path from "path";
+import { Server } from "socket.io";
+import { fileURLToPath } from "url";
+
 import connectDB from "./config/database.js";
+import config from "./config/environment.js";
+import { corsOptions, generalLimiter } from "./config/security.js";
 import errorHandler from "./middlewares/errorHandler.js";
+import notFoundHandler from "./middlewares/notFoundHandler.js";
+import requestLogger from "./middlewares/requestLogger.js";
 import { initializeDefaultBadges } from "./services/badgeService.js";
-// Import routes
-import authRoutes from './routes/authRoutes.js';
-import gamificationRoutes from './routes/gamificationRoutes.js';
-import geminiRoutes from './routes/geminiRoutes.js';
-import leaderboardRoutes from './routes/leaderboardRoutes.js';
-import musicRoutes from './routes/musicRoutes.js';
-import playlistRoutes from './routes/playlistRoutes.js';
-import userRoutes from './routes/userRoutes.js';
 import SocketManager from "./services/socketManager.js";
+import logger from "./utils/logger.js";
 
-dotenv.config();
+import authRoutes from "./routes/authRoutes.js";
+import gamificationRoutes from "./routes/gamificationRoutes.js";
+import geminiRoutes from "./routes/geminiRoutes.js";
+import leaderboardRoutes from "./routes/leaderboardRoutes.js";
+import musicRoutes from "./routes/musicRoutes.js";
+import playlistRoutes from "./routes/playlistRoutes.js";
+import privacyRoutes from "./routes/privacyRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
+import wellbeingRoutes from "./routes/wellbeingRoutes.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const FRONTEND_DIST = path.join(__dirname, "../frontend/dist");
+
 const app = express();
-
-// Connect to MongoDB
-connectDB().then(() => {
-  console.log('Database connected successfully');
-  console.log('Starting badge initialization...');
-  initializeDefaultBadges();
-}).catch((err) => {
-  console.error('Database connection failed:', err);
-  // Don't exit in production, but log the error
-  if (process.env.NODE_ENV !== 'production') {
-    process.exit(1);
-  }
-});
-
 const server = http.createServer(app);
-
-// Session options - use environment variable for secret
-const sessionOptions = {
-  secret: process.env.SESSION_SECRET || 'mysupersecretcode',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production', // HTTPS in production
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  }
-};
-
-app.use(session(sessionOptions));
-
-// CORS Configuration - Updated for Railway
-app.use(cors({
-  origin: [
-    'http://localhost:5173',        // Vite dev server
-    'http://localhost:3000',        // Local backend
-    process.env.FRONTEND_URL,       // Railway production URL
-    /\.railway\.app$/               // Any Railway subdomain
-  ],
-  credentials: true
-}));
-
-app.use(express.json());
-
-// Socket.io with updated CORS - Fixed missing comma
-const io = new Server(server, {
-  cors: {
-    origin: function (origin, callback) {
-      const allowedOrigins = [
-        'http://localhost:5173',
-        'http://localhost:3000',
-        'https://6862e0d66e3cfca404b2bb65--enchanting-smakager-13714c.netlify.app',
-        process.env.FRONTEND_URL // Fixed: Added missing comma above
-      ];
-      
-      // Allow requests with no origin (mobile apps, etc.)
-      if (!origin) return callback(null, true);
-      
-      // Check if origin is allowed or matches Railway pattern
-      if (allowedOrigins.includes(origin) || /\.railway\.app$/.test(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS for WebSocket'));
-      }
-    },
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true
-  }
-});
-
+const io = new Server(server, { cors: corsOptions });
 const socketManager = new SocketManager(io);
 
-// Middleware to add socket manager to requests
+app.set("trust proxy", 1);
+
+app.use(helmet({ crossOriginEmbedderPolicy: false }));
+app.use(cors(corsOptions));
+app.use(compression());
+app.use(express.json({ limit: "1mb" }));
+app.use(mongoSanitize());
+app.use(requestLogger);
+
+app.use(
+  session({
+    secret: config.session.secret,
+    resave: false,
+    saveUninitialized: false,
+    store: MongoStore.create({
+      mongoUrl: config.mongoUri,
+      collectionName: "sessions",
+      ttl: config.session.maxAgeMs / 1000,
+    }),
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: config.isProduction,
+      maxAge: config.session.maxAgeMs,
+    },
+  })
+);
+
 app.use((req, res, next) => {
   req.socketManager = socketManager;
   req.io = io;
   next();
 });
 
-// API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/music/recommend', musicRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/gemini', geminiRoutes);
-app.use('/api/playlists', playlistRoutes);
-app.use('/api/gamification', gamificationRoutes);
-app.use('/api/leaderboard', leaderboardRoutes);
-
-// Health check endpoint
 app.get("/api/health", (req, res) => {
-  res.json({ 
-    status: "Server is running...", 
+  res.json({
+    status: "ok",
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: config.nodeEnv,
   });
 });
 
-// Serve static files from React build (ONLY in production)
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/dist')));
-  
-  // Catch all handler for React Router
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-      res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
-    }
+app.use("/api", generalLimiter);
+app.use("/api/auth", authRoutes);
+app.use("/api/music/recommend", musicRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/gemini", geminiRoutes);
+app.use("/api/playlists", playlistRoutes);
+app.use("/api/gamification", gamificationRoutes);
+app.use("/api/leaderboard", leaderboardRoutes);
+app.use("/api/wellbeing", wellbeingRoutes);
+app.use("/api/privacy", privacyRoutes);
+
+app.use("/api", notFoundHandler);
+
+if (config.isProduction) {
+  app.use(express.static(FRONTEND_DIST));
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(FRONTEND_DIST, "index.html"));
   });
 } else {
-  // Development root route
   app.get("/", (req, res) => {
-    res.json({ 
-      message: "ZENOVA Music Therapy Backend API", 
-      environment: "development",
-      frontend: "http://localhost:5173"
+    res.json({
+      message: "ZENOVA Music Therapy Backend API",
+      environment: config.nodeEnv,
+      frontend: config.frontendUrl,
     });
   });
 }
 
-// Global Error Handler (must be last)
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 3000;
+const start = async () => {
+  await connectDB();
+  await initializeDefaultBadges();
 
-server.listen(PORT, () => {
-  console.log(` ZENOVA Server running on port ${PORT}`);
-  console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(` Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`);
+  server.listen(config.port, () => {
+    logger.info("server started", {
+      port: config.port,
+      environment: config.nodeEnv,
+      frontendUrl: config.frontendUrl,
+    });
+  });
+};
+
+/**
+ * An unhandled rejection leaves the process in an unknown state; log it and
+ * exit so the supervisor restarts cleanly rather than serving from a broken one.
+ */
+process.on("unhandledRejection", (reason) => {
+  logger.error("unhandled rejection", { reason: String(reason) });
+  server.close(() => process.exit(1));
+});
+
+process.on("SIGTERM", () => {
+  logger.info("SIGTERM received, shutting down");
+  server.close(() => process.exit(0));
+});
+
+start().catch((error) => {
+  logger.error("failed to start server", { error: error.message });
+  process.exit(1);
 });
 
 export default app;

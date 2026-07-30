@@ -1,18 +1,10 @@
-import dotenv from "dotenv";
 import mongoose from "mongoose";
-
-dotenv.config();
+import config from "./environment.js";
 
 const connectDB = async () => {
-  try {
-    const mongoURI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/therapy';
-    await mongoose.connect(mongoURI);
-    console.log("MongoDB Connected");
-    
-  } catch (error) {
-    console.error("MongoDB Connection Error:", error);
-    process.exit(1);
-  }
+  mongoose.set("strictQuery", true);
+  await mongoose.connect(config.mongoUri);
+  console.log("MongoDB connected");
 };
 
 export default connectDB;
