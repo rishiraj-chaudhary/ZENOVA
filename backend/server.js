@@ -1,4 +1,5 @@
 import compression from "compression";
+import cookieParser from "cookie-parser";
 import MongoStore from "connect-mongo";
 import cors from "cors";
 import express from "express";
@@ -45,6 +46,7 @@ app.use(helmet({ crossOriginEmbedderPolicy: false }));
 app.use(cors(corsOptions));
 app.use(compression());
 app.use(express.json({ limit: "1mb" }));
+app.use(cookieParser());
 app.use(mongoSanitize());
 app.use(requestLogger);
 

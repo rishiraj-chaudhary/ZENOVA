@@ -21,7 +21,7 @@ const registerAndLogin = async ({ consent = true } = {}) => {
   };
 
   const { body } = await request(app).post("/api/auth/register").send(credentials);
-  const token = body.token;
+  const token = body.user.token;
 
   if (consent) {
     await request(app)

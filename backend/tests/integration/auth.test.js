@@ -21,7 +21,7 @@ describe("POST /api/auth/register", () => {
     const response = await request(app).post("/api/auth/register").send(VALID_USER);
 
     expect(response.status).toBe(201);
-    expect(response.body.token).toBeTruthy();
+    expect(response.body.user.token).toBeTruthy();
     expect(response.body.user.email).toBe(VALID_USER.email);
   });
 

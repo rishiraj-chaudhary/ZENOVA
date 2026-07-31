@@ -43,7 +43,10 @@ const config = {
 
   jwt: {
     secret: process.env.JWT_SECRET ?? "development-only-jwt-secret",
-    expiresIn: process.env.JWT_EXPIRES_IN ?? "30d",
+    // Short-lived by design: the access token is the credential an XSS can
+    // steal, so its useful life is minutes rather than the previous 30 days.
+    // Sessions stay long-lived through the rotating refresh token instead.
+    expiresIn: process.env.JWT_EXPIRES_IN ?? "15m",
   },
 
   session: {

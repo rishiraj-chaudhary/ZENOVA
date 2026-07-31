@@ -1,3 +1,4 @@
+import cookieParser from "cookie-parser";
 import express from "express";
 import session from "express-session";
 import { corsOptions } from "../../config/security.js";
@@ -21,6 +22,7 @@ export const buildTestApp = () => {
   const app = express();
 
   app.use(express.json());
+  app.use(cookieParser());
   app.use(
     session({ secret: "test", resave: false, saveUninitialized: false })
   );

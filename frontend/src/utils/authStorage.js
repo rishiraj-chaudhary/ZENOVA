@@ -1,25 +1,48 @@
-const TOKEN_KEY = "token";
 const USER_ID_KEY = "userId";
+const REFRESH_KEY = "zenova_refresh";
 
 /**
- * Session-scoped credential storage, in one place.
+ * Access token lives in memory only.
  *
- * Components previously read the token from sessionStorage in some files and
- * localStorage in others, which silently broke every request made by the
- * localStorage readers.
+ * It was previously a 30-day JWT in sessionStorage, so any XSS meant a
+ * month-long account takeover. In memory it dies with the tab, and it now
+ * expires in 15 minutes, so the window an injected script could exploit is
+ * bounded even while the page is open.
  */
-export const getStoredToken = () => sessionStorage.getItem(TOKEN_KEY);
+let accessToken = null;
 
-export const getStoredUserId = () => sessionStorage.getItem(USER_ID_KEY);
+export const getAccessToken = () => accessToken;
+export const setAccessToken = (token) => {
+  accessToken = token;
+};
 
-export const storeAuth = ({ token, userId }) => {
-  sessionStorage.setItem(TOKEN_KEY, token);
-  sessionStorage.setItem(USER_ID_KEY, userId);
+/**
+ * The refresh token normally lives in an httpOnly cookie the page cannot read.
+ * This mirror is only populated when the server had to fall back to returning
+ * it in the body — see backend/utils/refreshCookie.js for why that path exists.
+ */
+export const getStoredRefreshToken = () => sessionStorage.getItem(REFRESH_KEY);
+
+export const storeAuth = ({ token, userId, refreshToken }) => {
+  setAccessToken(token);
+  if (userId) sessionStorage.setItem(USER_ID_KEY, userId);
+  if (refreshToken) sessionStorage.setItem(REFRESH_KEY, refreshToken);
 };
 
 export const clearStoredAuth = () => {
-  sessionStorage.removeItem(TOKEN_KEY);
+  setAccessToken(null);
   sessionStorage.removeItem(USER_ID_KEY);
+  sessionStorage.removeItem(REFRESH_KEY);
 };
 
-export const hasStoredAuth = () => Boolean(getStoredToken() && getStoredUserId());
+export const getStoredUserId = () => sessionStorage.getItem(USER_ID_KEY);
+
+/**
+ * Whether a session is worth attempting to restore.
+ *
+ * True even without an access token in memory: after a reload the token is
+ * gone but the refresh cookie may still be valid, so the app should try to
+ * refresh rather than assume the user is signed out.
+ */
+export const hasStoredAuth = () =>
+  Boolean(accessToken || getStoredUserId() || getStoredRefreshToken());

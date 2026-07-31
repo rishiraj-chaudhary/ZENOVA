@@ -1,15 +1,49 @@
-import { authenticateUser, registerUser, toPublicUser } from "../services/authService.js";
+import User from "../models/user.js";
+import {
+  authenticateUser,
+  issueAccessToken,
+  registerUser,
+  toPublicUser,
+} from "../services/authService.js";
+import {
+  issueRefreshToken,
+  revokeAllForUser,
+  revokeToken,
+  rotateRefreshToken,
+} from "../services/refreshTokenService.js";
 import AppError from "../utils/AppError.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import {
+  clearRefreshCookie,
+  readRefreshToken,
+  setRefreshCookie,
+} from "../utils/refreshCookie.js";
+
+/**
+ * Issues the credential pair and stages the response body.
+ *
+ * The refresh token goes in an httpOnly cookie so no script can read it. It is
+ * also returned in the body as a compatibility path for clients whose browser
+ * blocks the cross-site cookie — see utils/refreshCookie.js.
+ */
+const establishSession = async (req, res, user) => {
+  const refreshToken = await issueRefreshToken(user._id, {
+    userAgent: req.headers["user-agent"],
+  });
+
+  setRefreshCookie(res, refreshToken);
+
+  return {
+    user: { ...user, token: issueAccessToken(user._id) },
+    refreshToken,
+  };
+};
 
 export const register = asyncHandler(async (req, res) => {
-  const { user, token } = await registerUser(req.body);
+  const { user } = await registerUser(req.body);
+  const payload = await establishSession(req, res, user);
 
-  res.status(201).json({
-    message: "User registered successfully",
-    token,
-    user,
-  });
+  res.status(201).json({ message: "User registered successfully", ...payload });
 });
 
 /**
@@ -22,11 +56,11 @@ export const register = asyncHandler(async (req, res) => {
  * middleware chain meaningful.
  */
 export const login = asyncHandler(async (req, res, next) => {
-  const { user, token } = await authenticateUser(req.body);
+  const { user } = await authenticateUser(req.body);
 
   req.session.user = user;
   req.user = user;
-  res.locals.authPayload = { user: { ...user, token } };
+  res.locals.authPayload = await establishSession(req, res, user);
 
   next();
 });
@@ -43,14 +77,49 @@ export const sendAuthPayload = (req, res) => {
   res.json(res.locals.authPayload);
 };
 
-export const logout = (req, res, next) => {
+/**
+ * Exchanges a refresh token for a new access token, rotating the refresh token
+ * in the process so each one is single-use.
+ */
+export const refresh = asyncHandler(async (req, res) => {
+  const presented = readRefreshToken(req);
+
+  const { token, userId } = await rotateRefreshToken(presented, {
+    userAgent: req.headers["user-agent"],
+  });
+
+  const user = await User.findById(userId).select("-password").lean();
+  if (!user) {
+    await revokeAllForUser(userId);
+    throw AppError.unauthorized("Account no longer exists");
+  }
+
+  setRefreshCookie(res, token);
+
+  res.json({
+    user: { ...toPublicUser(user), token: issueAccessToken(userId) },
+    refreshToken: token,
+  });
+});
+
+export const logout = asyncHandler(async (req, res) => {
+  await revokeToken(readRefreshToken(req));
+  clearRefreshCookie(res);
+
   if (!req.session) {
     return res.json({ message: "Logged out successfully" });
   }
 
-  req.session.destroy((err) => {
-    if (err) return next(err);
+  req.session.destroy(() => {
     res.clearCookie("connect.sid");
     res.json({ message: "Logged out successfully" });
   });
-};
+});
+
+/** Signs the user out everywhere, e.g. after a suspected compromise. */
+export const logoutAllDevices = asyncHandler(async (req, res) => {
+  await revokeAllForUser(req.user._id);
+  clearRefreshCookie(res);
+
+  res.json({ message: "Signed out on all devices" });
+});

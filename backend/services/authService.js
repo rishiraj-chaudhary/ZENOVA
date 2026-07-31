@@ -4,7 +4,7 @@ import User from "../models/user.js";
 import AppError from "../utils/AppError.js";
 import { hashPassword, matchPassword } from "../utils/passwordUtils.js";
 
-const issueToken = (userId) =>
+export const issueAccessToken = (userId) =>
   jwt.sign({ id: userId }, config.jwt.secret, {
     expiresIn: config.jwt.expiresIn,
   });
@@ -29,7 +29,7 @@ export const registerUser = async ({ name, email, password }) => {
     password: await hashPassword(password),
   });
 
-  return { user: toPublicUser(user), token: issueToken(user._id) };
+  return { user: toPublicUser(user) };
 };
 
 export const authenticateUser = async ({ email, password }) => {
@@ -43,7 +43,7 @@ export const authenticateUser = async ({ email, password }) => {
   if (!user) throw invalid;
   if (!(await matchPassword(password, user.password))) throw invalid;
 
-  return { user: toPublicUser(user), token: issueToken(user._id) };
+  return { user: toPublicUser(user) };
 };
 
 export { toPublicUser };

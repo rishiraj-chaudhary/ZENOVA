@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as authAPI from "../api/authAPI.js";
+import { onSessionEnded, refreshSession } from "../api/client.js";
 import { fetchUserProfile } from "../api/userAPI.js";
 import { clearStoredAuth, hasStoredAuth, storeAuth } from "../utils/authStorage.js";
 
@@ -9,8 +10,13 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Restores the session on reload. A failed lookup means the stored token is
-  // stale, so it is discarded rather than left to fail every later request.
+  /**
+   * Restores the session on reload.
+   *
+   * The access token lives in memory, so a reload always starts without one.
+   * A refresh is attempted first; if the refresh token is gone or revoked the
+   * user is genuinely signed out.
+   */
   useEffect(() => {
     const restoreSession = async () => {
       if (!hasStoredAuth()) {
@@ -19,6 +25,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       try {
+        await refreshSession();
         setUser(await fetchUserProfile());
       } catch {
         clearStoredAuth();
@@ -30,11 +37,15 @@ export const AuthProvider = ({ children }) => {
     restoreSession();
   }, []);
 
+  // The API client ends the session when a refresh fails; mirror that here so
+  // the UI drops to signed-out instead of rendering with a stale user.
+  useEffect(() => onSessionEnded(() => setUser(null)), []);
+
   const login = useCallback(async (credentials) => {
-    const { user: authenticatedUser } = await authAPI.login(credentials);
+    const { user: authenticatedUser, refreshToken } = await authAPI.login(credentials);
     const { token, ...profile } = authenticatedUser;
 
-    storeAuth({ token, userId: profile._id });
+    storeAuth({ token, userId: profile._id, refreshToken });
     setUser(profile);
 
     return profile;

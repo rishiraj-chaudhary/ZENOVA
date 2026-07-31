@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "../config/api.js";
-import { getStoredToken } from "../utils/authStorage.js";
+import { getAccessToken } from "../utils/authStorage.js";
 import apiClient from "./client.js";
 
 /**
@@ -8,7 +8,7 @@ import apiClient from "./client.js";
  */
 export const downloadMyData = async () => {
   const response = await fetch(`${API_BASE_URL}/privacy/export`, {
-    headers: { Authorization: `Bearer ${getStoredToken()}` },
+    headers: { Authorization: `Bearer ${getAccessToken()}` },
     credentials: "include",
   });
 

@@ -5,6 +5,8 @@ import {
   checkAuth,
   login,
   logout,
+  logoutAllDevices,
+  refresh,
   register,
   sendAuthPayload,
 } from "../controllers/authController.js";
@@ -43,6 +45,12 @@ router.post(
 
 router.get("/check-session", protect, checkAuth, trackDailyLogin, sendAuthPayload);
 
+// Rate limited because an attacker with a stolen token would otherwise be able
+// to probe it freely. Not behind `protect`: the whole point is that the access
+// token has already expired.
+router.post("/refresh", authLimiter, refresh);
+
 router.post("/logout", logout);
+router.post("/logout-all", protect, logoutAllDevices);
 
 export default router;
