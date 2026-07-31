@@ -1,11 +1,10 @@
 import Gamification from "../models/Gamification.js";
 import Leaderboard from "../models/Leaderboard.js";
 import logger from "../utils/logger.js";
+import { acquireLock } from "../utils/taskLock.js";
 
 const LEADERBOARD_SIZE = 100;
 const REBUILD_INTERVAL_MS = 60 * 1000;
-
-const lastRebuiltAt = new Map();
 
 /**
  * Rebuilds a leaderboard from current gamification stats.
@@ -55,17 +54,26 @@ export const updateLeaderboard = async (type = "alltime", period = "all") => {
  * acceptable; rebuilding it on every single point award was not — that made
  * every playlist action pay for a full ranking pass.
  */
+/**
+ * Throttled rebuild for the hot path. A leaderboard up to a minute stale is
+ * acceptable; rebuilding it on every single point award was not.
+ *
+ * The throttle is a database lock rather than an in-process Map, because the
+ * latter throttled per instance — three instances meant three rebuilds per
+ * interval, each a full ranking pass.
+ */
 export const scheduleLeaderboardRefresh = (type = "alltime", period) => {
   const resolvedPeriod = period ?? currentPeriod(type);
-  const key = `${type}:${resolvedPeriod}`;
-  const now = Date.now();
+  const key = `leaderboard:${type}:${resolvedPeriod}`;
 
-  if (now - (lastRebuiltAt.get(key) ?? 0) < REBUILD_INTERVAL_MS) return;
-  lastRebuiltAt.set(key, now);
-
-  updateLeaderboard(type, resolvedPeriod).catch((error) =>
-    logger.error("Leaderboard refresh failed:", error.message)
-  );
+  // Fire-and-forget: the caller is a user request that must not wait on, or
+  // fail because of, a background ranking refresh.
+  acquireLock(key, REBUILD_INTERVAL_MS)
+    .then((acquired) => {
+      if (!acquired) return null;
+      return updateLeaderboard(type, resolvedPeriod);
+    })
+    .catch((error) => logger.error("leaderboard refresh failed", { error: error.message }));
 };
 
 /**

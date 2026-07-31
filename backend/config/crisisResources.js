@@ -1,11 +1,25 @@
 /**
  * Crisis support contacts surfaced when a user's message indicates risk.
  *
- * VERIFY BEFORE EACH RELEASE. Helpline numbers, operating hours and operators
- * change; a stale number is worse than none. Sources are listed so they can be
- * re-checked. `region` matches the first segment of the Accept-Language header
- * or an explicit user setting, falling back to INTERNATIONAL.
+ * A stale number is worse than none, so this file carries an explicit
+ * verification date and a test fails once it is older than MAX_AGE_DAYS.
+ * Re-check each number against its operator, then update VERIFIED_ON.
+ *
+ * `region` matches the country segment of the Accept-Language header or an
+ * explicit user setting, falling back to INTERNATIONAL.
  */
+
+/** Date the numbers below were last checked against their operators. */
+export const VERIFIED_ON = "2026-07-30";
+
+/** Beyond this the registry is treated as unverified and CI fails. */
+export const MAX_AGE_DAYS = 180;
+
+export const verificationAgeDays = (now = new Date()) =>
+  Math.floor((now - new Date(VERIFIED_ON)) / (24 * 60 * 60 * 1000));
+
+export const isVerificationStale = (now = new Date()) =>
+  verificationAgeDays(now) > MAX_AGE_DAYS;
 
 const INTERNATIONAL = [
   {

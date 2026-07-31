@@ -7,6 +7,7 @@ import Gamification from "../models/Gamification.js";
 import { UserBadge } from "../models/Badge.js";
 import User from "../models/user.js";
 import AppError from "../utils/AppError.js";
+import { withTransaction } from "../utils/withTransaction.js";
 
 /**
  * Everything the app stores about one person, in one document.
@@ -85,12 +86,14 @@ export const exportUserData = async (userId) => {
  * Erases the user's wellbeing data while leaving the account usable.
  * For people who want a clean slate without losing their playlists.
  */
-export const deleteWellbeingData = async (userId) => {
+const eraseWellbeing = async (userId, session) => {
+  const options = session ? { session } : {};
+
   const [moods, feedback, outcomes, recommendations] = await Promise.all([
-    MoodEntry.deleteMany({ userId }),
-    ListeningFeedback.deleteMany({ userId }),
-    SessionOutcome.deleteMany({ userId }),
-    Recommendation.deleteMany({ userId }),
+    MoodEntry.deleteMany({ userId }, options),
+    ListeningFeedback.deleteMany({ userId }, options),
+    SessionOutcome.deleteMany({ userId }, options),
+    Recommendation.deleteMany({ userId }, options),
   ]);
 
   return {
@@ -101,6 +104,9 @@ export const deleteWellbeingData = async (userId) => {
   };
 };
 
+export const deleteWellbeingData = (userId) =>
+  withTransaction((session) => eraseWellbeing(userId, session));
+
 /**
  * Full account erasure.
  *
@@ -108,18 +114,25 @@ export const deleteWellbeingData = async (userId) => {
  * survive with their membership stripped, so deleting your account cannot
  * destroy someone else's data.
  */
-export const deleteAccount = async (userId) => {
-  const wellbeing = await deleteWellbeingData(userId);
+export const deleteAccount = (userId) =>
+  withTransaction(async (session) => {
+    const options = session ? { session } : {};
 
-  const [ownedPlaylists] = await Promise.all([
-    Playlist.deleteMany({ userId }),
-    Playlist.updateMany({ collaborators: userId }, { $pull: { collaborators: userId } }),
-    Gamification.deleteOne({ userId }),
-    UserBadge.deleteMany({ userId }),
-  ]);
+    const wellbeing = await eraseWellbeing(userId, session);
 
-  const deleted = await User.findByIdAndDelete(userId);
-  if (!deleted) throw AppError.notFound("User not found");
+    const [ownedPlaylists] = await Promise.all([
+      Playlist.deleteMany({ userId }, options),
+      Playlist.updateMany(
+        { collaborators: userId },
+        { $pull: { collaborators: userId } },
+        options
+      ),
+      Gamification.deleteOne({ userId }, options),
+      UserBadge.deleteMany({ userId }, options),
+    ]);
 
-  return { ...wellbeing, playlists: ownedPlaylists.deletedCount, account: 1 };
-};
+    const deleted = await User.findByIdAndDelete(userId, options);
+    if (!deleted) throw AppError.notFound("User not found");
+
+    return { ...wellbeing, playlists: ownedPlaylists.deletedCount, account: 1 };
+  });

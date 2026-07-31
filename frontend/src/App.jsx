@@ -1,5 +1,12 @@
 import { Suspense, lazy } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router-dom";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import NotificationToast from "./components/Gamification/NotificationToast.jsx";
 import Navbar from "./components/Navbar.jsx";
 import Onboarding from "./components/Onboarding.jsx";
@@ -36,44 +43,51 @@ const RequireAuth = ({ children }) => {
 
 const AppRoutes = () => {
   const { loading, needsOnboarding, completeOnboarding } = useAuth();
+  const location = useLocation();
 
   if (loading) return <FullPageMessage>Loading…</FullPageMessage>;
 
   return (
     <>
-      <Navbar />
-      <NotificationToast />
+      <ErrorBoundary label="the navigation bar">
+        <Navbar />
+      </ErrorBoundary>
+      <ErrorBoundary label="notifications">
+        <NotificationToast />
+      </ErrorBoundary>
 
       {/* Blocks the app until the intro is done, so nobody lands on a blank
           chat and no mood is recorded before consent is given. */}
       {needsOnboarding && <Onboarding onComplete={completeOnboarding} />}
 
       <div className="pt-16">
-        <Suspense fallback={<FullPageMessage>Loading…</FullPageMessage>}>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route path="/spotify-callback" element={<SpotifyCallback />} />
-            <Route path="/invite/:inviteCode" element={<InviteAccept />} />
+        <ErrorBoundary resetKey={location.pathname} label="this page">
+          <Suspense fallback={<FullPageMessage>Loading…</FullPageMessage>}>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="/spotify-callback" element={<SpotifyCallback />} />
+              <Route path="/invite/:inviteCode" element={<InviteAccept />} />
 
-            {[
-              ["/profile", <Profile />],
-              ["/playlist", <Playlist />],
-              ["/insights", <Insights />],
-              ["/gamification", <Gamification />],
-              ["/settings", <Settings />],
-            ].map(([path, element]) => (
-              <Route
-                key={path}
-                path={path}
-                element={<RequireAuth>{element}</RequireAuth>}
-              />
-            ))}
+              {[
+                ["/profile", <Profile />],
+                ["/playlist", <Playlist />],
+                ["/insights", <Insights />],
+                ["/gamification", <Gamification />],
+                ["/settings", <Settings />],
+              ].map(([path, element]) => (
+                <Route
+                  key={path}
+                  path={path}
+                  element={<RequireAuth>{element}</RequireAuth>}
+                />
+              ))}
 
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
       </div>
     </>
   );
