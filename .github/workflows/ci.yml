@@ -61,5 +61,8 @@ jobs:
       - name: Lint
         run: npm run lint --workspace frontend
 
+      - name: Test
+        run: npm test --workspace frontend
+
       - name: Build
         run: npm run build --workspace frontend
