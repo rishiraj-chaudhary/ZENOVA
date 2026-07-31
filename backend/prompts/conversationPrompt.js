@@ -1,3 +1,4 @@
+import { wrapUntrusted } from "../utils/untrustedContent.js";
 export const buildConversationalPrompt = (
   userInput,
   conversationHistory = [],
@@ -24,7 +25,8 @@ USER PROFILE:
 CONVERSATION HISTORY:
 ${formattedHistory}
 
-CURRENT MESSAGE: "${userInput}"
+CURRENT MESSAGE:
+${wrapUntrusted(userInput, { label: "user message" })}
 
 YOUR THERAPEUTIC COMMUNICATION STYLE:
 

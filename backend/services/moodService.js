@@ -1,5 +1,6 @@
 import MoodEntry from "../models/MoodEntry.js";
 import User from "../models/user.js";
+import logger from "../utils/logger.js";
 
 const DEFAULT_HISTORY_LIMIT = 50;
 const MAX_CONTEXT_LENGTH = 200;
@@ -36,7 +37,7 @@ export const recordMood = async ({ userId, mood, context, source, intensity }) =
       intensity,
     });
   } catch (error) {
-    console.error("Failed to record mood:", error.message);
+    logger.error("Failed to record mood:", error.message);
     return null;
   }
 };

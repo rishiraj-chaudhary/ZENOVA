@@ -9,7 +9,8 @@
     "dev": "nodemon server.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "migrate": "node scripts/migrateMoodTracking.js"
+    "migrate": "node scripts/migrateMoodTracking.js",
+    "eval:safety": "node evals/runSafetyEval.js"
   },
   "keywords": [],
   "author": "",

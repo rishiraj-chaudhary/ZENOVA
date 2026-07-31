@@ -1,65 +1,89 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import config from "../config/environment.js";
 import AppError from "../utils/AppError.js";
+import { recordLlmCall } from "../utils/llmMetrics.js";
+import logger from "../utils/logger.js";
 
-let cachedModel = null;
+const modelCache = new Map();
 
-const getModel = () => {
+const getClient = () => {
   if (!config.gemini.apiKey) {
     throw AppError.badGateway("AI service is not configured");
   }
-  if (!cachedModel) {
-    const client = new GoogleGenerativeAI(config.gemini.apiKey);
-    cachedModel = client.getGenerativeModel({ model: config.gemini.model });
+  return new GoogleGenerativeAI(config.gemini.apiKey);
+};
+
+/**
+ * Models are cached per generation config. A schema-constrained model and a
+ * free-text one are different objects, so keying on the schema avoids
+ * rebuilding either on every call.
+ */
+const getModel = (responseSchema) => {
+  const key = responseSchema ? JSON.stringify(responseSchema) : "text";
+  if (modelCache.has(key)) return modelCache.get(key);
+
+  const model = getClient().getGenerativeModel({
+    model: config.gemini.model,
+    ...(responseSchema && {
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema,
+      },
+    }),
+  });
+
+  modelCache.set(key, model);
+  return model;
+};
+
+const usageOf = (result) => ({
+  promptTokens: result.response?.usageMetadata?.promptTokenCount ?? 0,
+  outputTokens: result.response?.usageMetadata?.candidatesTokenCount ?? 0,
+});
+
+/** Runs a generation, recording latency, tokens and outcome either way. */
+const generate = async (operation, prompt, responseSchema) => {
+  const startedAt = process.hrtime.bigint();
+
+  try {
+    const result = await getModel(responseSchema).generateContent(prompt);
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+
+    recordLlmCall({ operation, durationMs, outcome: "success", ...usageOf(result) });
+    return result.response.text().trim();
+  } catch (error) {
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+    recordLlmCall({ operation, durationMs, outcome: "error" });
+    throw error;
   }
-  return cachedModel;
 };
 
 /** Returns the model's raw text response. */
-export const generateText = async (prompt) => {
-  const result = await getModel().generateContent(prompt);
-  return result.response.text().trim();
-};
+export const generateText = (prompt, { operation = "text" } = {}) =>
+  generate(operation, prompt);
 
 /**
- * Models often wrap JSON in ```json fences or surround it with prose, and
- * sometimes emit "duration": 4:36 which is not valid JSON. Normalising here
- * keeps every caller from reinventing its own parser.
+ * Generates schema-constrained JSON.
+ *
+ * With a schema the model returns bare JSON, so no extraction is needed. The
+ * previous implementation stripped code fences, brace-scanned for an object and
+ * regex-patched "duration": 4:36 into seconds — all of which existed only
+ * because generation was unconstrained.
+ *
+ * Returns null on a parse failure so callers can fall back rather than fail.
  */
-const extractJsonCandidate = (text) => {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced) return fenced[1];
-
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end <= start) return null;
-
-  return text.slice(start, end + 1);
-};
-
-const normalizeDurations = (json) =>
-  json.replace(
-    /"duration":\s*(\d+):(\d+)/g,
-    (_match, minutes, seconds) =>
-      `"duration": ${Number(minutes) * 60 + Number(seconds)}`
-  );
-
-/**
- * Generates content and parses it as JSON. Returns null when the model produced
- * nothing parseable, letting callers fall back rather than failing the request.
- */
-export const generateJson = async (prompt) => {
-  const text = await generateText(prompt);
-  const candidate = extractJsonCandidate(text);
-  if (!candidate) {
-    console.warn("Gemini returned no JSON payload");
-    return null;
-  }
+export const generateJson = async (prompt, { schema, operation = "json" } = {}) => {
+  const text = await generate(operation, prompt, schema);
 
   try {
-    return JSON.parse(normalizeDurations(candidate));
+    return JSON.parse(text);
   } catch (error) {
-    console.warn("Failed to parse Gemini JSON response:", error.message);
+    logger.warn("gemini returned unparseable JSON", {
+      operation,
+      error: error.message,
+      preview: text.slice(0, 120),
+    });
+    recordLlmCall({ operation, durationMs: 0, outcome: "parse_error" });
     return null;
   }
 };

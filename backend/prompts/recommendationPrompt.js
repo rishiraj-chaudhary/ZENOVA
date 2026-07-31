@@ -1,3 +1,4 @@
+import { wrapUntrusted } from "../utils/untrustedContent.js";
 import { formatConversation } from "./moodPrompt.js";
 
 const distributionStrategy = (requestedCount) => {
@@ -71,7 +72,8 @@ ${avoidSection}
 CONVERSATION CONTEXT:
 ${formatConversation(conversationHistory, 5)}
 
-CURRENT REQUEST: "${userInput}"
+CURRENT REQUEST:
+${wrapUntrusted(userInput, { label: "user request" })}
 
 SONG COUNT REQUIREMENT: You MUST provide exactly ${requestedCount} song recommendations in your response.
 
@@ -103,33 +105,12 @@ ADVANCED ANALYSIS FRAMEWORK:
    - Catharsis: Allow emotional release when appropriate
    - Distraction: Redirect from negative thoughts when needed
 
-RESPONSE FORMAT - Return valid JSON only:
-{
-  "response": "Empathetic, personalized response (2-3 sentences) acknowledging their state and explaining your approach",
-  "detectedMood": "primary_emotion_identified",
-  "therapeuticGoal": "what_we_aim_to_achieve",
-  "requestedCount": ${requestedCount},
-  "recommendations": [
-    {
-      "title": "Song Title",
-      "artist": "Artist Name",
-      "genre": "Primary Genre",
-      "moodTags": ["current_mood", "target_mood", "energy_level"],
-      "duration": 240,
-      "recommendedFor": ["specific_activity", "emotional_state"],
-      "reason": "Detailed therapeutic explanation of why this song helps with their specific need",
-      "energyLevel": "low/medium/high",
-      "therapeuticFunction": "support/transition/energize/calm/motivate"
-    }
-  ]
-}
-
 CRITICAL REQUIREMENTS:
 1. ALWAYS provide exactly ${requestedCount} songs in the recommendations array
 2. If the user requested a specific number, acknowledge it in your response
 3. Each song must be unique and serve a specific therapeutic purpose
 4. Ensure variety in energy levels and therapeutic functions across the ${requestedCount} songs
-5. "duration" must be an integer number of seconds, never "m:ss"
+5. "response" is your conversational reply; "reason" explains one song's therapeutic fit
 
 SONG DISTRIBUTION STRATEGY FOR ${requestedCount} SONGS:
 ${distributionStrategy(requestedCount)}

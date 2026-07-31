@@ -21,7 +21,8 @@ export const analyzeMood = async ({
 
   const profile = await loadTherapyProfile(userId);
   const mood = await generateText(
-    buildMoodAnalysisPrompt(userInput, conversationHistory, profile)
+    buildMoodAnalysisPrompt(userInput, conversationHistory, profile),
+    { operation: "mood" }
   );
 
   if (!profile.isGuest) {
@@ -67,7 +68,8 @@ export const generateChatReply = async ({
   const response = await generateText(
     risk.level === RISK_LEVELS.ELEVATED
       ? `${ELEVATED_RISK_PROMPT_GUIDANCE}\n\n${basePrompt}`
-      : basePrompt
+      : basePrompt,
+    { operation: "chat" }
   );
 
   if (!profile.isGuest) {

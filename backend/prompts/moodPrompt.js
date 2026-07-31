@@ -1,3 +1,4 @@
+import { wrapUntrusted } from "../utils/untrustedContent.js";
 const formatRecentMoods = (moodHistory) =>
   moodHistory.slice(-5).map((entry) => entry.mood).join(", ") || "No previous data";
 
@@ -28,7 +29,8 @@ CONTEXT ANALYSIS:
 - Recent conversation context:
 ${formatConversation(conversationHistory, 3)}
 
-CURRENT USER INPUT: "${userInput}"
+CURRENT USER INPUT:
+${wrapUntrusted(userInput, { label: "user message" })}
 
 ANALYSIS FRAMEWORK:
 1. PRIMARY EMOTION DETECTION:

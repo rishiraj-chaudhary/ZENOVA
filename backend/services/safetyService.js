@@ -1,5 +1,8 @@
 import { EMERGENCY_NOTICE, getCrisisResources } from "../config/crisisResources.js";
+import { wrapUntrusted } from "../utils/untrustedContent.js";
 import { generateJson } from "./geminiService.js";
+import { RISK_SCHEMA } from "./schemas.js";
+import logger from "../utils/logger.js";
 
 export const RISK_LEVELS = {
   NONE: "none",
@@ -52,10 +55,7 @@ const screenWithPatterns = (text) => {
 
 const CLASSIFIER_PROMPT = (text) => `You are a safety classifier for a music wellbeing app. Assess ONLY the risk level in the message below. Do not respond to the user, offer advice, or recommend music.
 
-MESSAGE: "${text}"
-
-Return JSON exactly:
-{"risk": "none" | "elevated" | "crisis", "reason": "brief justification"}
+${wrapUntrusted(text, { label: "user message" })}
 
 DEFINITIONS:
 - "crisis": any reference to suicide, self-harm, wanting to die, or being in danger now
@@ -71,11 +71,14 @@ When uncertain between two levels, choose the HIGHER risk level.`;
  */
 const screenWithModel = async (text) => {
   try {
-    const result = await generateJson(CLASSIFIER_PROMPT(text));
+    const result = await generateJson(CLASSIFIER_PROMPT(text), {
+      schema: RISK_SCHEMA,
+      operation: "safety",
+    });
     const risk = result?.risk;
     return Object.values(RISK_LEVELS).includes(risk) ? risk : RISK_LEVELS.NONE;
   } catch (error) {
-    console.warn("Safety classifier unavailable:", error.message);
+    logger.warn("Safety classifier unavailable:", error.message);
     return RISK_LEVELS.NONE;
   }
 };

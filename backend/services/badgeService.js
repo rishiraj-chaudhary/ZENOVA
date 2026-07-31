@@ -2,6 +2,7 @@ import { BADGES } from "../config/gamification.js";
 import { Badge, UserBadge } from "../models/Badge.js";
 import Gamification from "../models/Gamification.js";
 import Playlist from "../models/Playlist.js";
+import logger from "../utils/logger.js";
 
 /**
  * Reads every value a badge requirement can be measured against, in one pass.
@@ -27,7 +28,7 @@ const meetsRequirement = (badge, snapshot) => {
   const progress = snapshot[type];
 
   if (progress === undefined) {
-    console.warn(`Unknown badge requirement type: ${type}`);
+    logger.warn(`Unknown badge requirement type: ${type}`);
     return false;
   }
 
@@ -131,6 +132,6 @@ export const initializeDefaultBadges = async () => {
       }))
     );
   } catch (error) {
-    console.error("Failed to initialize default badges:", error.message);
+    logger.error("Failed to initialize default badges:", error.message);
   }
 };

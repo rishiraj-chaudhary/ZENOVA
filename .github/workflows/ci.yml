@@ -33,6 +33,17 @@ jobs:
           SESSION_SECRET: ci-session-secret
           FRONTEND_URL: http://localhost:5173
 
+      # Gates on the crisis classifier's judgement, not just its plumbing. Runs
+      # offline (deterministic layer only) so it needs no API key and cannot
+      # fail on someone else's rate limit. Set GEMINI_API_KEY as a secret to
+      # additionally exercise the model layer.
+      - name: Safety eval
+        run: npm run eval:safety --workspace backend -- --offline
+        env:
+          JWT_SECRET: ci-jwt-secret
+          SESSION_SECRET: ci-session-secret
+          FRONTEND_URL: http://localhost:5173
+
   frontend:
     name: Frontend lint & build
     runs-on: ubuntu-latest

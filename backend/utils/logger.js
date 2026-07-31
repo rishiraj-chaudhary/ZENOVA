@@ -25,11 +25,25 @@ const redact = (value, depth = 0) => {
 };
 
 /**
+ * Metadata is expected to be a plain object. A string or Error passed by
+ * mistake would otherwise be spread into indexed characters or dropped, so it
+ * is normalised into a `detail` field instead.
+ */
+const toMeta = (meta) => {
+  if (meta == null) return {};
+  if (meta instanceof Error) return { detail: meta.message, stack: meta.stack };
+  if (typeof meta !== "object" || Array.isArray(meta)) return { detail: meta };
+  return meta;
+};
+
+/**
  * Emits one JSON object per line so logs are queryable by any aggregator.
  * Development stays human-readable.
  */
-const emit = (level, message, meta = {}) => {
+const emit = (level, message, rawMeta) => {
   if (LEVELS[level] > activeLevel) return;
+
+  const meta = toMeta(rawMeta);
 
   const entry = {
     level,

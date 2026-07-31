@@ -1,5 +1,6 @@
 import User from "../models/user.js";
 import { getRecentMoods } from "./moodService.js";
+import logger from "../utils/logger.js";
 
 const RECENT_MOOD_WINDOW = 10;
 
@@ -49,6 +50,6 @@ export const recordSession = async (userId, sessionType) => {
       $set: { lastSessionDate: new Date() },
     });
   } catch (error) {
-    console.error("Failed to record session:", error.message);
+    logger.error("Failed to record session:", error.message);
   }
 };

@@ -3,6 +3,7 @@ import querystring from "querystring";
 import SpotifyWebApi from "spotify-web-api-node";
 import config from "../config/environment.js";
 import AppError from "../utils/AppError.js";
+import logger from "../utils/logger.js";
 
 const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
 const AUTHORIZE_ENDPOINT = "https://accounts.spotify.com/authorize";
@@ -86,7 +87,7 @@ export const findTrack = async (title, artist) => {
   try {
     await ensureAppToken();
   } catch (error) {
-    console.error("Spotify authentication failed:", error.message);
+    logger.error("Spotify authentication failed:", error.message);
     return null;
   }
 
@@ -100,7 +101,7 @@ export const findTrack = async (title, artist) => {
         tracks.find((track) => matchesTitleAndArtist(track, title, artist)) ?? tracks[0];
       return toTrackSummary(bestMatch);
     } catch (error) {
-      console.warn(`Spotify search failed for "${query}":`, error.message);
+      logger.warn(`Spotify search failed for "${query}":`, error.message);
     }
   }
 
@@ -140,7 +141,7 @@ const requestUserToken = async (payload) => {
       expiresIn: data.expires_in,
     };
   } catch (error) {
-    console.error("Spotify token request failed:", error.response?.data ?? error.message);
+    logger.error("Spotify token request failed:", error.response?.data ?? error.message);
     throw AppError.badGateway("Failed to authenticate with Spotify");
   }
 };

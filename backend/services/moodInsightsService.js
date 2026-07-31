@@ -3,6 +3,8 @@ import MoodEntry from "../models/MoodEntry.js";
 import SessionOutcome from "../models/SessionOutcome.js";
 import { buildInsightPrompt } from "../prompts/insightPrompt.js";
 import { generateJson } from "./geminiService.js";
+import { INSIGHT_SCHEMA } from "./schemas.js";
+import logger from "../utils/logger.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MIN_ENTRIES_FOR_INSIGHT = 5;
@@ -195,9 +197,12 @@ export const generateInsightNarrative = async (insights) => {
   if (!insights.hasEnoughData) return null;
 
   try {
-    return await generateJson(buildInsightPrompt(insights));
+    return await generateJson(buildInsightPrompt(insights), {
+      schema: INSIGHT_SCHEMA,
+      operation: "insight",
+    });
   } catch (error) {
-    console.error("Insight narrative generation failed:", error.message);
+    logger.error("Insight narrative generation failed:", error.message);
     return null;
   }
 };

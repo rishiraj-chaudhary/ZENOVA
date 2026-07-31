@@ -5,6 +5,7 @@ import { buildMoodAnalysisPrompt } from "../prompts/moodPrompt.js";
 import { buildRecommendationPrompt } from "../prompts/recommendationPrompt.js";
 import parseRequestedSongCount from "../utils/parseRequestedSongCount.js";
 import { generateJson, generateText } from "./geminiService.js";
+import { RECOMMENDATION_SCHEMA } from "./schemas.js";
 import { recordMood } from "./moodService.js";
 import {
   ELEVATED_RISK_PROMPT_GUIDANCE,
@@ -15,6 +16,7 @@ import {
 import { findTrack } from "./spotifyService.js";
 import { buildTasteProfile, getSkippedSongTitles } from "./tasteService.js";
 import { loadTherapyProfile } from "./userProfileService.js";
+import logger from "../utils/logger.js";
 
 const buildYouTubeSearchUrl = (title, artist) => {
   const cleaned = `${title} ${artist}`.replace(/[^\w\s]/g, " ").trim();
@@ -47,10 +49,11 @@ const loadPersonalizationContext = async (userId) => {
 const detectMood = async (message, conversationHistory, userProfile) => {
   try {
     return await generateText(
-      buildMoodAnalysisPrompt(message, conversationHistory, userProfile)
+      buildMoodAnalysisPrompt(message, conversationHistory, userProfile),
+      { operation: "mood" }
     );
   } catch (error) {
-    console.warn("Mood detection failed:", error.message);
+    logger.warn("Mood detection failed:", error.message);
     return null;
   }
 };
@@ -173,7 +176,8 @@ export const generateRecommendations = async ({
   const aiResult = await generateJson(
     risk.level === RISK_LEVELS.ELEVATED
       ? `${ELEVATED_RISK_PROMPT_GUIDANCE}\n\n${basePrompt}`
-      : basePrompt
+      : basePrompt,
+    { schema: RECOMMENDATION_SCHEMA, operation: "recommendation" }
   );
 
   const result = Array.isArray(aiResult?.recommendations)
@@ -189,7 +193,7 @@ export const generateRecommendations = async ({
 
   settled
     .filter((outcome) => outcome.status === "rejected")
-    .forEach((outcome) => console.error("Failed to persist song:", outcome.reason));
+    .forEach((outcome) => logger.error("Failed to persist song:", outcome.reason));
 
   const detectedMood = result.detectedMood ?? currentMood;
 

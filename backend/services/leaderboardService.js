@@ -1,5 +1,6 @@
 import Gamification from "../models/Gamification.js";
 import Leaderboard from "../models/Leaderboard.js";
+import logger from "../utils/logger.js";
 
 const LEADERBOARD_SIZE = 100;
 const REBUILD_INTERVAL_MS = 60 * 1000;
@@ -63,7 +64,7 @@ export const scheduleLeaderboardRefresh = (type = "alltime", period) => {
   lastRebuiltAt.set(key, now);
 
   updateLeaderboard(type, resolvedPeriod).catch((error) =>
-    console.error("Leaderboard refresh failed:", error.message)
+    logger.error("Leaderboard refresh failed:", error.message)
   );
 };
 

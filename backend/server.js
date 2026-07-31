@@ -18,6 +18,7 @@ import notFoundHandler from "./middlewares/notFoundHandler.js";
 import requestLogger from "./middlewares/requestLogger.js";
 import { initializeDefaultBadges } from "./services/badgeService.js";
 import SocketManager from "./services/socketManager.js";
+import { getLlmMetrics, startMetricsReporter } from "./utils/llmMetrics.js";
 import logger from "./utils/logger.js";
 
 import authRoutes from "./routes/authRoutes.js";
@@ -75,6 +76,12 @@ app.use((req, res, next) => {
   next();
 });
 
+// Operational metrics for the Gemini integration: cost, latency and failure
+// rates per operation. Previously none of these were observable.
+app.get("/api/health/llm", (req, res) => {
+  res.json(getLlmMetrics());
+});
+
 app.get("/api/health", (req, res) => {
   res.json({
     status: "ok",
@@ -116,6 +123,7 @@ app.use(errorHandler);
 const start = async () => {
   await connectDB();
   await initializeDefaultBadges();
+  startMetricsReporter();
 
   server.listen(config.port, () => {
     logger.info("server started", {
