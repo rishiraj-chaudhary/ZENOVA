@@ -56,7 +56,23 @@ const config = {
 
   gemini: {
     apiKey: process.env.GEMINI_API_KEY,
-    model: process.env.GEMINI_MODEL ?? "gemini-2.0-flash",
+
+    // gemini-2.0-flash was retired ("no longer available to new users") and
+    // returns 404 alongside a zero free-tier quota, which reads as a billing
+    // problem rather than a dead model. Pin a current one.
+    model: process.env.GEMINI_MODEL ?? "gemini-3.5-flash",
+
+    // Tried in order when the primary returns 503/429. A single overloaded
+    // model is common and should degrade quality, not take the app down.
+    fallbackModels: (process.env.GEMINI_FALLBACK_MODELS ??
+      "gemini-3-flash-preview,gemini-flash-lite-latest")
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean),
+
+    // Safety classification runs on every message and is a simple three-way
+    // label, so it uses a cheaper, faster model than recommendation generation.
+    fastModel: process.env.GEMINI_FAST_MODEL ?? "gemini-flash-lite-latest",
   },
 
   spotify: {

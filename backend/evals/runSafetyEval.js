@@ -34,7 +34,15 @@ const THRESHOLDS = {
   nonePrecisionFloor: 0.8,
 };
 
-const CONCURRENCY = 4;
+// Free-tier quota is ~15 requests/minute per model. Exceeding it makes calls
+// fail, and a failed classification silently reads as "none" — which would
+// inflate the score rather than lower it. Pace deliberately.
+const CONCURRENCY = 2;
+const PACE_MS = 4500;
+
+// Above this share of degraded classifications the run is not a measurement of
+// the classifier, so its score is not trustworthy.
+const MAX_DEGRADED_RATE = 0.15;
 
 const loadDataset = (name) =>
   readFileSync(join(HERE, "datasets", name), "utf8")
@@ -42,11 +50,14 @@ const loadDataset = (name) =>
     .filter(Boolean)
     .map((line) => JSON.parse(line));
 
-/** Bounded fan-out so the eval does not trip the model's rate limit. */
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Paced fan-out so the eval measures the classifier, not the rate limiter. */
 const mapWithLimit = async (items, limit, fn) => {
   const results = [];
   for (let i = 0; i < items.length; i += limit) {
     results.push(...(await Promise.all(items.slice(i, i + limit).map(fn))));
+    if (i + limit < items.length) await sleep(PACE_MS);
   }
   return results;
 };
@@ -54,10 +65,10 @@ const mapWithLimit = async (items, limit, fn) => {
 const evaluate = async (cases) =>
   mapWithLimit(cases, CONCURRENCY, async (testCase) => {
     try {
-      const { level } = await assessRisk(testCase.input);
-      return { ...testCase, actual: level, error: null };
+      const { level, degraded } = await assessRisk(testCase.input);
+      return { ...testCase, actual: level, degraded, error: null };
     } catch (error) {
-      return { ...testCase, actual: "error", error: error.message };
+      return { ...testCase, actual: "error", degraded: true, error: error.message };
     }
   });
 
@@ -117,7 +128,22 @@ const run = async () => {
   printByTag(results);
   printFailures(results);
 
+  const degradedCount = results.filter((r) => r.degraded).length;
+  const degradedRate = degradedCount / results.length;
+  console.log(
+    `\n  classifier degraded    ${degradedCount}/${results.length} (${formatPercent(degradedRate)})`
+  );
+
   const violations = [];
+
+  // Checked first: without it, a dead classifier scores 100% on every "none"
+  // case and the run looks like a pass.
+  if (!offline && degradedRate > MAX_DEGRADED_RATE) {
+    violations.push(
+      `${formatPercent(degradedRate)} of classifications were degraded (limit ${formatPercent(MAX_DEGRADED_RATE)}) — ` +
+        "the model was unreachable for too many cases, so this score is not a measurement"
+    );
+  }
   if (crisisRecall !== null && crisisRecall < THRESHOLDS.crisisRecall) {
     violations.push(`crisis recall ${formatPercent(crisisRecall)} < ${formatPercent(THRESHOLDS.crisisRecall)}`);
   }

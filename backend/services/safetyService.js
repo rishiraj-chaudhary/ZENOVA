@@ -1,4 +1,5 @@
 import { EMERGENCY_NOTICE, getCrisisResources } from "../config/crisisResources.js";
+import config from "../config/environment.js";
 import { wrapUntrusted } from "../utils/untrustedContent.js";
 import { generateJson } from "./geminiService.js";
 import { RISK_SCHEMA } from "./schemas.js";
@@ -68,18 +69,30 @@ When uncertain between two levels, choose the HIGHER risk level.`;
  * Second pass for phrasing the patterns miss. Only runs when the deterministic
  * screen found nothing, and only escalates — it can never downgrade a pattern
  * match, so a model failure cannot suppress a detected crisis.
+ *
+ * Reports `degraded` when the model could not be consulted. Without that flag a
+ * failed call is indistinguishable from a genuine "none", which would let a
+ * completely dead classifier look healthy — in the eval and in production.
  */
 const screenWithModel = async (text) => {
   try {
     const result = await generateJson(CLASSIFIER_PROMPT(text), {
       schema: RISK_SCHEMA,
       operation: "safety",
+      // Runs on every message; a three-way label does not need the large model.
+      model: config.gemini.fastModel,
     });
+
     const risk = result?.risk;
-    return Object.values(RISK_LEVELS).includes(risk) ? risk : RISK_LEVELS.NONE;
+    if (Object.values(RISK_LEVELS).includes(risk)) {
+      return { level: risk, degraded: false };
+    }
+
+    logger.warn("safety classifier returned an unusable label", { risk });
+    return { level: RISK_LEVELS.NONE, degraded: true };
   } catch (error) {
-    logger.warn("Safety classifier unavailable:", error.message);
-    return RISK_LEVELS.NONE;
+    logger.warn("safety classifier unavailable", { detail: error.message });
+    return { level: RISK_LEVELS.NONE, degraded: true };
   }
 };
 
@@ -89,16 +102,22 @@ const screenWithModel = async (text) => {
  * non-none level so the client can always render support.
  */
 export const assessRisk = async (text, { region } = {}) => {
-  if (!text?.trim()) return { level: RISK_LEVELS.NONE };
+  if (!text?.trim()) return { level: RISK_LEVELS.NONE, degraded: false };
 
   const patternLevel = screenWithPatterns(text);
-  const level =
-    patternLevel === RISK_LEVELS.NONE ? await screenWithModel(text) : patternLevel;
 
-  if (level === RISK_LEVELS.NONE) return { level };
+  // The pattern screen is authoritative when it fires, so the model is only
+  // consulted — and can only be degraded — when patterns found nothing.
+  const { level, degraded } =
+    patternLevel === RISK_LEVELS.NONE
+      ? await screenWithModel(text)
+      : { level: patternLevel, degraded: false };
+
+  if (level === RISK_LEVELS.NONE) return { level, degraded };
 
   return {
     level,
+    degraded,
     resources: getCrisisResources(region),
     notice: EMERGENCY_NOTICE,
   };

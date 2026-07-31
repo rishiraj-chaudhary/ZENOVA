@@ -69,9 +69,30 @@ describe("assessRisk", () => {
   it("degrades to none, not a crash, when the model fails on unmatched text", async () => {
     vi.mocked(generateJson).mockRejectedValue(new Error("Gemini down"));
 
+    // `degraded` distinguishes an unreachable classifier from a genuine "none".
+    // Without it a dead classifier is indistinguishable from a healthy one.
     await expect(assessRisk("recommend jazz")).resolves.toEqual({
       level: RISK_LEVELS.NONE,
+      degraded: true,
     });
+  });
+
+  it("reports a healthy classifier as not degraded", async () => {
+    vi.mocked(generateJson).mockResolvedValue({ risk: "none" });
+
+    await expect(assessRisk("play something upbeat")).resolves.toEqual({
+      level: RISK_LEVELS.NONE,
+      degraded: false,
+    });
+  });
+
+  it("never marks a pattern match as degraded, even with the model down", async () => {
+    vi.mocked(generateJson).mockRejectedValue(new Error("Gemini down"));
+
+    const result = await assessRisk("I want to die");
+
+    expect(result.level).toBe(RISK_LEVELS.CRISIS);
+    expect(result.degraded).toBe(false);
   });
 
   it("returns region-specific helplines", async () => {
@@ -83,7 +104,10 @@ describe("assessRisk", () => {
   });
 
   it("ignores empty input", async () => {
-    await expect(assessRisk("")).resolves.toEqual({ level: RISK_LEVELS.NONE });
+    await expect(assessRisk("")).resolves.toEqual({
+      level: RISK_LEVELS.NONE,
+      degraded: false,
+    });
   });
 });
 
