@@ -1,6 +1,20 @@
-import express from 'express';
-import { fetchLeaderBoard } from '../controllers/leaderboardController.js';
-const router=express.Router();
+import express from "express";
+import { query } from "express-validator";
+import { fetchLeaderBoard } from "../controllers/leaderboardController.js";
+import protect from "../middlewares/authMiddleware.js";
+import validateRequest from "../middlewares/validateRequest.js";
 
-router.get('/',fetchLeaderBoard);
+const router = express.Router();
+
+// Usernames and progress were readable by anyone; the board is a signed-in
+// surface like every sibling route.
+router.use(protect);
+
+router.get(
+  "/",
+  [query("type").optional().isIn(["alltime", "weekly", "monthly"])],
+  validateRequest,
+  fetchLeaderBoard
+);
+
 export default router;

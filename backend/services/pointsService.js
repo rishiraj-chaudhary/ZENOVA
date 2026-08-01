@@ -1,9 +1,10 @@
-import { LEVELS, POINTS } from "../config/gamification.js";
+import { DAILY_POINT_CAPS, LEVELS, POINTS } from "../config/gamification.js";
 import Gamification from "../models/Gamification.js";
+import PointAward from "../models/PointAward.js";
+import { dayKey, daysBetweenKeys } from "../utils/dayKey.js";
 import logger from "../utils/logger.js";
 import { scheduleLeaderboardRefresh } from "./leaderboardService.js";
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const DUPLICATE_KEY = 11000;
 
 /** Counters incremented alongside points, keyed by action. */
@@ -12,6 +13,9 @@ const ACTION_COUNTERS = {
   PLAYLIST_CREATED: "playlistsCreated",
   SONG_ADDED: "songsAdded",
   DAILY_LOGIN: "dailyLogins",
+  DAILY_CHECK_IN: "checkInDays",
+  SESSION_MEASURED: "measuredSessions",
+  THERAPY_SESSION_COMPLETED: "therapySessions",
 };
 
 export const calculateLevel = (totalPoints) =>
@@ -23,8 +27,7 @@ export const calculateLevel = (totalPoints) =>
 /**
  * Concurrent upserts on the same missing document can both pass the existence
  * check and race to insert, which the unique index on userId rejects with
- * E11000. Retrying once is sufficient: by then the document exists, so the
- * retry takes the update path.
+ * E11000. Retrying once is sufficient: by then the document exists.
  */
 const upsertStats = async (userId, update) => {
   const options = { upsert: true, new: true, setDefaultsOnInsert: true };
@@ -42,39 +45,71 @@ const emit = (socketManager, userId, event, payload) => {
 };
 
 /**
- * Awards points for an action.
+ * Claims the right to award, exactly once, for this user/action/entity.
  *
- * The increment is a single atomic `$inc`, not a read-modify-write. The previous
- * implementation loaded the document, mutated it in memory and saved it, so
- * concurrent awards clobbered each other — ten simultaneous awards persisted
- * one. Since two rapid playlist actions overlap in practice, scores, counters,
- * leaderboard ranks and badge thresholds were all silently wrong.
+ * The unique index is the anti-farming mechanism: a second attempt for the same
+ * entity conflicts and is refused. Points used to be fire-and-forget
+ * increments, so deleting and recreating a playlist — or logging out and back
+ * in — paid every single time.
  */
-export const awardPoints = async (userId, action, socketManager) => {
-  const normalizedAction = action.toUpperCase();
-  const points = POINTS[normalizedAction] ?? 0;
-  const counter = ACTION_COUNTERS[normalizedAction];
+const claimAward = async ({ userId, action, entityKey, points }) => {
+  try {
+    const award = await PointAward.create({ userId, action, entityKey, points });
+    return award;
+  } catch (error) {
+    if (error.code === DUPLICATE_KEY) return null;
+    throw error;
+  }
+};
 
-  const stats = await upsertStats(userId, {
-    $inc: {
-      totalPoints: points,
-      ...(counter && { [counter]: 1 }),
+/** Points granted for this action today, counted from the award ledger. */
+const pointsAwardedToday = async (userId, action) => {
+  const [totals] = await PointAward.aggregate([
+    {
+      $match: {
+        userId,
+        action,
+        awardedAt: { $gte: new Date(`${dayKey()}T00:00:00.000Z`) },
+      },
     },
-  });
+    { $group: { _id: null, points: { $sum: "$points" } } },
+  ]);
 
-  // Level is a pure function of the authoritative post-increment total, so it
-  // is derived rather than incremented. `$max` keeps it monotonic under
-  // concurrency: a slower writer can never lower a level a faster one set.
+  return totals?.points ?? 0;
+};
+
+/**
+ * Enforces the daily ceiling by claiming first and verifying after.
+ *
+ * Checking the total before claiming is a read-then-write: twenty concurrent
+ * awards all observe the pre-write total, all pass, and the cap is ignored.
+ * Inserting the claim first means each caller counts its own claim plus every
+ * one that landed before it, so the callers over the line see it and withdraw.
+ * Overshoot is bounded to a single award rather than unbounded.
+ */
+const withinDailyCap = async (userId, action, awardId) => {
+  const cap = DAILY_POINT_CAPS[action];
+  if (cap == null) return true;
+
+  if ((await pointsAwardedToday(userId, action)) <= cap) return true;
+
+  await PointAward.deleteOne({ _id: awardId });
+  logger.debug("daily cap reached", { action });
+  return false;
+};
+
+/** Level derivation, emission and leaderboard refresh — shared by every award. */
+const applyAwardEffects = async (userId, action, points, stats, socketManager) => {
+  // Level is a pure function of the authoritative post-increment total. $max
+  // keeps it monotonic: a slower writer can never lower a level a faster one set.
   const level = calculateLevel(stats.totalPoints);
   const leveledUp = level > stats.level;
 
-  if (leveledUp) {
-    await Gamification.updateOne({ userId }, { $max: { level } });
-  }
+  if (leveledUp) await Gamification.updateOne({ userId }, { $max: { level } });
 
   emit(socketManager, userId, "points_awarded", {
     points,
-    action: normalizedAction,
+    action,
     totalPoints: stats.totalPoints,
     level,
     leveledUp,
@@ -84,78 +119,129 @@ export const awardPoints = async (userId, action, socketManager) => {
     emit(socketManager, userId, "level_up", { level, totalPoints: stats.totalPoints });
   }
 
-  // All three boards read the same stats, so all three stay current.
   scheduleLeaderboardRefresh("alltime");
   scheduleLeaderboardRefresh("monthly");
   scheduleLeaderboardRefresh("weekly");
 
-  return { points, totalPoints: stats.totalPoints, level, leveledUp };
+  return { awarded: true, points, totalPoints: stats.totalPoints, level, leveledUp };
 };
 
-const daysBetween = (later, earlier) =>
-  Math.floor((later.getTime() - earlier.getTime()) / MS_PER_DAY);
+const NOT_AWARDED = { awarded: false, points: 0 };
+
+/**
+ * Awards points for an action, at most once per entity and within the daily cap.
+ *
+ * `entityKey` identifies what is being rewarded — a playlist id, a session id,
+ * a day key. Callers that pass none get a per-day key, which makes the action
+ * once-daily rather than unlimited.
+ */
+export const awardPoints = async (userId, action, socketManager, { entityKey } = {}) => {
+  const normalizedAction = action.toUpperCase();
+  const points = POINTS[normalizedAction] ?? 0;
+  const key = entityKey ?? dayKey();
+
+  const award = await claimAward({
+    userId,
+    action: normalizedAction,
+    entityKey: key,
+    points,
+  });
+  if (!award) return NOT_AWARDED;
+
+  if (!(await withinDailyCap(userId, normalizedAction, award._id))) {
+    return NOT_AWARDED;
+  }
+
+  const counter = ACTION_COUNTERS[normalizedAction];
+  const stats = await upsertStats(userId, {
+    $inc: { totalPoints: points, ...(counter && { [counter]: 1 }) },
+  });
+
+  return applyAwardEffects(userId, normalizedAction, points, stats, socketManager);
+};
 
 /** Missing this many days or fewer is forgiven once per grace period. */
 const STREAK_GRACE_DAYS = 2;
 const GRACE_COOLDOWN_DAYS = 14;
 
-const graceAvailable = (stats, now) =>
-  !stats.lastGraceUsedAt ||
-  daysBetween(now, stats.lastGraceUsedAt) >= GRACE_COOLDOWN_DAYS;
-
-/** Decides the next streak state from the current one. Pure, so it is testable. */
-const nextStreakState = (stats, now) => {
-  const isFirstActivity = !stats.lastActivity || stats.currentStreak === 0;
-  const elapsedDays = isFirstActivity ? null : daysBetween(now, stats.lastActivity);
-
-  if (isFirstActivity) return { currentStreak: 1, graceUsed: false };
-  if (elapsedDays === 0) return { currentStreak: stats.currentStreak, graceUsed: false };
-  if (elapsedDays === 1) return { currentStreak: stats.currentStreak + 1, graceUsed: false };
-
-  const withinGrace = elapsedDays <= STREAK_GRACE_DAYS + 1;
-  if (withinGrace && graceAvailable(stats, now)) {
-    return { currentStreak: stats.currentStreak + 1, graceUsed: true };
-  }
-
-  return { currentStreak: 1, graceUsed: false };
+const graceAvailable = (stats, todayKey) => {
+  if (!stats.lastGraceUsedDay) return true;
+  return daysBetweenKeys(todayKey, stats.lastGraceUsedDay) >= GRACE_COOLDOWN_DAYS;
 };
 
 /**
- * Advances the daily streak. Same-day activity is a no-op, the next calendar
- * day extends the streak, and a longer gap resets it.
- *
- * A short gap is forgiven once per fortnight. In a wellbeing context a broken
- * streak lands as personal failure at exactly the moment someone was already
- * struggling — the grace period keeps the habit loop without that penalty.
- *
- * The decision depends on current state, so it cannot be a single atomic
- * operator. Instead the write is guarded on the `lastActivity` value that was
- * read: if a concurrent call already advanced the streak, this update matches
- * nothing and is skipped, which is correct because the streak should advance
- * at most once per day.
+ * Decides the next streak state from the current one. Pure, so it is testable
+ * without a clock or a database.
  */
-export const updateStreak = async (userId, socketManager) => {
-  const stats = await upsertStats(userId, { $setOnInsert: { currentStreak: 0 } });
-  const now = new Date();
+export const nextStreakState = (stats, todayKey) => {
+  const lastDay = stats.lastActivityDay;
 
-  const { currentStreak, graceUsed } = nextStreakState(stats, now);
+  if (!lastDay || stats.currentStreak === 0) {
+    return { currentStreak: 1, graceUsed: false, unchanged: false, reset: false };
+  }
+
+  const elapsed = daysBetweenKeys(todayKey, lastDay);
+
+  // Already counted today. Nothing to record, and nothing to announce.
+  if (elapsed <= 0) {
+    return { currentStreak: stats.currentStreak, unchanged: true, graceUsed: false, reset: false };
+  }
+
+  if (elapsed === 1) {
+    return {
+      currentStreak: stats.currentStreak + 1,
+      graceUsed: false,
+      unchanged: false,
+      reset: false,
+    };
+  }
+
+  if (elapsed <= STREAK_GRACE_DAYS + 1 && graceAvailable(stats, todayKey)) {
+    return {
+      currentStreak: stats.currentStreak + 1,
+      graceUsed: true,
+      unchanged: false,
+      reset: false,
+    };
+  }
+
+  return { currentStreak: 1, graceUsed: false, unchanged: false, reset: true };
+};
+
+/**
+ * Advances the daily streak.
+ *
+ * Compares calendar days rather than elapsed milliseconds: a 23:00 visit
+ * followed by one at 08:00 is the next day, which the old duration arithmetic
+ * scored as zero. A short gap is forgiven once a fortnight, because in a
+ * wellbeing context a broken streak lands as personal failure at exactly the
+ * moment someone was already struggling.
+ */
+export const updateStreak = async (userId, socketManager, { timeZone = "UTC" } = {}) => {
+  const stats = await upsertStats(userId, { $setOnInsert: { currentStreak: 0 } });
+  const todayKey = dayKey(new Date(), timeZone);
+
+  const { currentStreak, graceUsed, unchanged, reset } = nextStreakState(stats, todayKey);
+
+  // Nothing changed today, so no write and — importantly — no toast. The old
+  // version emitted "Streak updated" on every app open.
+  if (unchanged) return stats.currentStreak;
 
   const result = await Gamification.updateOne(
-    { userId, lastActivity: stats.lastActivity ?? null },
+    { userId, lastActivityDay: stats.lastActivityDay ?? null },
     {
       $set: {
         currentStreak,
-        lastActivity: now,
-        ...(graceUsed && { lastGraceUsedAt: now }),
+        lastActivityDay: todayKey,
+        lastActivity: new Date(),
+        ...(graceUsed && { lastGraceUsedDay: todayKey }),
       },
       $max: { longestStreak: currentStreak },
     }
   );
 
   if (result.matchedCount === 0) {
-    logger.debug("streak already advanced by a concurrent request", {
-      userId: userId.toString(),
-    });
+    logger.debug("streak already advanced by a concurrent request");
     return stats.currentStreak;
   }
 
@@ -163,9 +249,10 @@ export const updateStreak = async (userId, socketManager) => {
     currentStreak,
     longestStreak: Math.max(stats.longestStreak ?? 0, currentStreak),
     graceUsed,
+    // Lets the client say "streak restarted" instead of congratulating someone
+    // on the streak they just lost.
+    reset,
   });
 
   return currentStreak;
 };
-
-export { nextStreakState };

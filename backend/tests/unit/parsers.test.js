@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getLevelProgress } from "../../config/gamification.js";
 import { calculateLevel } from "../../services/pointsService.js";
 import parseRequestedSongCount, {
   DEFAULT_SONG_COUNT,
@@ -59,16 +60,40 @@ describe("parseVoicePlaylistCommand", () => {
 });
 
 describe("calculateLevel", () => {
+  // Thresholds were rescaled when the reward table was re-pointed at measured
+  // sessions; the old level-2 boundary of 40 was a debug value.
   it.each([
     [0, 1],
-    [39, 1],
-    [40, 2],
-    [499, 2],
-    [500, 3],
-    [1500, 4],
+    [149, 1],
+    [150, 2],
+    [599, 2],
+    [600, 3],
+    [1800, 4],
     [5000, 5],
     [999999, 5],
   ])("maps %i points to level %i", (points, expected) => {
     expect(calculateLevel(points)).toBe(expected);
+  });
+});
+
+describe("getLevelProgress", () => {
+  it("reports position within the current band", () => {
+    const progress = getLevelProgress(300);
+
+    expect(progress.level).toBe(2);
+    expect(progress.pointsIntoLevel).toBe(150);
+    expect(progress.pointsForNextLevel).toBe(450);
+    expect(progress.fraction).toBeCloseTo(150 / 450);
+  });
+
+  it("saturates at the top level", () => {
+    const progress = getLevelProgress(99999);
+
+    expect(progress.nextLevelName).toBeNull();
+    expect(progress.fraction).toBe(1);
+  });
+
+  it("starts empty at zero points", () => {
+    expect(getLevelProgress(0).fraction).toBe(0);
   });
 });

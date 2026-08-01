@@ -10,6 +10,7 @@ const Gamification = () => {
     const { user } = useAuth();
     const { state, dispatch } = useGamification();
     const [leaderboard, setLeaderboard] = useState([]);
+    const [boardType, setBoardType] = useState("alltime");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [activeTab, setActiveTab] = useState("overview");
@@ -21,7 +22,7 @@ const Gamification = () => {
             try {
                 const [stats, entries] = await Promise.all([
                     getUserStats(),
-                    getLeaderboard(),
+                    getLeaderboard(boardType),
                 ]);
 
                 dispatch({ type: "SET_STATS", payload: stats });
@@ -35,7 +36,7 @@ const Gamification = () => {
         };
 
         loadGamificationData();
-    }, [user, dispatch]);
+    }, [user, dispatch, boardType]);
 
     if(loading){
         return (
@@ -104,18 +105,38 @@ const Gamification = () => {
                   <i className="fa-solid fa-star text-white text-lg"></i>
                 </div>
                 <div>
-                  <div className="text-white text-lg font-bold">Level {state.level}</div>
+                  <div className="text-white text-lg font-bold">
+                    Level {state.level}
+                    {state.progress?.levelName && (
+                      <span className="ml-2 text-sm font-normal text-gray-400">
+                        {state.progress.levelName}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-gray-400 text-xs">Your current level</div>
                 </div>
               </div>
-              <div className="w-full bg-gray-700 rounded-full h-2">
-                <div 
-                  className="bg-gradient-to-r from-yellow-500 to-orange-600 h-2 rounded-full transition-all duration-300" 
-                  style={{width: `${(state.points % 500) / 5}%`}}
-                ></div>
+
+              {/* Driven by the server's level thresholds. The bar previously used
+                  `points % 500`, which has no relation to the actual ladder. */}
+              <div
+                className="h-2 w-full rounded-full bg-gray-700"
+                role="progressbar"
+                aria-valuenow={Math.round((state.progress?.fraction ?? 0) * 100)}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Progress to next level"
+              >
+                <div
+                  className="h-2 rounded-full bg-gradient-to-r from-yellow-500 to-orange-600 transition-all duration-300"
+                  style={{ width: `${(state.progress?.fraction ?? 0) * 100}%` }}
+                />
               </div>
-              <div className="text-xs text-gray-400 mt-2">
-                {500 - (state.points % 500)} points to next level
+
+              <div className="mt-2 text-xs text-gray-400">
+                {state.progress?.nextLevelName
+                  ? `${state.progress.pointsForNextLevel - state.progress.pointsIntoLevel} points to ${state.progress.nextLevelName}`
+                  : "Top level reached"}
               </div>
             </div>
           </div>
@@ -130,10 +151,43 @@ const Gamification = () => {
         {activeTab === 'leaderboard' && (
           <div className="max-w-4xl mx-auto">
             <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
-              <h3 className="text-2xl font-bold text-white mb-6 flex items-center space-x-3">
-                <i className="fa-solid fa-trophy text-yellow-400"></i>
-                <span>Top Players</span>
-              </h3>
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+                <h3 className="flex items-center space-x-3 text-2xl font-bold text-white">
+                  <i className="fa-solid fa-trophy text-yellow-400"></i>
+                  <span>Top Players</span>
+                </h3>
+
+                {/* The three periods now return genuinely different data —
+                    weekly and monthly aggregate points earned within the
+                    period instead of reusing all-time totals. */}
+                <div role="tablist" aria-label="Leaderboard period" className="flex rounded-xl border border-white/10 bg-white/5 p-1">
+                  {[
+                    { id: "alltime", label: "All time" },
+                    { id: "monthly", label: "This month" },
+                    { id: "weekly", label: "This week" },
+                  ].map((option) => (
+                    <button
+                      key={option.id}
+                      role="tab"
+                      aria-selected={boardType === option.id}
+                      onClick={() => setBoardType(option.id)}
+                      className={`rounded-lg px-3 py-1.5 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 ${
+                        boardType === option.id
+                          ? "bg-indigo-500 text-white"
+                          : "text-gray-400 hover:text-white"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {leaderboard.length === 0 && (
+                <p className="py-8 text-center text-sm text-gray-400">
+                  No points earned in this period yet.
+                </p>
+              )}
               
               <div className="space-y-4">
                 {leaderboard.slice(0, 10).map((entry, index) => (

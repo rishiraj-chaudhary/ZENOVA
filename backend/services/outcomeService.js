@@ -1,6 +1,8 @@
 import Recommendation from "../models/Recommendation.js";
 import SessionOutcome from "../models/SessionOutcome.js";
 import AppError from "../utils/AppError.js";
+import { checkAndAwardBadges } from "./badgeService.js";
+import { awardPoints } from "./pointsService.js";
 import { recordSessionEffect } from "./songEffectService.js";
 
 /**
@@ -36,7 +38,7 @@ export const startSession = async ({ userId, sessionId, moodBefore }) => {
  * Completing a session is also the only event that writes to the song-effect
  * ledger, which is what turns an individual rating into ranking evidence.
  */
-export const completeSession = async ({ userId, sessionId, moodAfter }) => {
+export const completeSession = async ({ userId, sessionId, moodAfter, socketManager }) => {
   const outcome = await SessionOutcome.findOneAndUpdate(
     { sessionId, userId },
     { moodAfter, completedAt: new Date() },
@@ -50,6 +52,13 @@ export const completeSession = async ({ userId, sessionId, moodAfter }) => {
     moodBefore: outcome.moodBefore,
     moodAfter,
   });
+
+  // The behaviour the reward table now exists to encourage. Keyed on the
+  // session, so re-submitting a rating cannot pay twice.
+  await awardPoints(userId, "SESSION_MEASURED", socketManager, {
+    entityKey: sessionId.toString(),
+  });
+  await checkAndAwardBadges(userId, socketManager);
 
   return outcome;
 };

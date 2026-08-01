@@ -12,9 +12,15 @@ const gamificationSchema = new mongoose.Schema({
   playlistsCreated:{type: Number, default: 0},
   songsAdded:{type: Number, default: 0},
   dailyLogins: { type: Number, default: 0 },
-  // When the streak grace period was last consumed, so it cannot be used
-  // repeatedly to keep a streak alive indefinitely.
-  lastGraceUsedAt: { type: Date, default: null },
+  // Counters the badge requirements are measured against.
+  checkInDays: { type: Number, default: 0 },
+  measuredSessions: { type: Number, default: 0 },
+  therapySessions: { type: Number, default: 0 },
+  // Calendar-day keys ("YYYY-MM-DD"). Streaks are a calendar concept, so
+  // storing instants and diffing them mis-scored any visit that crossed
+  // midnight without a full 24 hours elapsing.
+  lastActivityDay: { type: String, default: null },
+  lastGraceUsedDay: { type: String, default: null },
   badges: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Badge' }]
 }, { timestamps: true });
 

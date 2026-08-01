@@ -1,3 +1,4 @@
+import { getLevelProgress } from "../config/gamification.js";
 import Gamification from "../models/Gamification.js";
 import { getUserBadges } from "./badgeService.js";
 
@@ -19,7 +20,9 @@ export const getUserStats = async (userId) => {
     getUserBadges(userId),
   ]);
 
-  if (!stats) return { ...EMPTY_STATS, badges };
+  if (!stats) {
+    return { ...EMPTY_STATS, badges, progress: getLevelProgress(0) };
+  }
 
   return {
     points: stats.totalPoints,
@@ -30,6 +33,11 @@ export const getUserStats = async (userId) => {
     playlistsCreated: stats.playlistsCreated,
     songsAdded: stats.songsAdded,
     dailyLogins: stats.dailyLogins,
+    measuredSessions: stats.measuredSessions,
+    checkInDays: stats.checkInDays,
+    // Everything the level bar needs, derived from the one source of truth for
+    // the thresholds rather than recomputed in the client.
+    progress: getLevelProgress(stats.totalPoints),
     badges,
   };
 };

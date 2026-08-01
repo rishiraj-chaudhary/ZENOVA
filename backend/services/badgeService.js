@@ -14,12 +14,18 @@ import logger from "../utils/logger.js";
 const loadProgressSnapshot = async (userId, stats) => {
   const playlistCount = await Playlist.countDocuments({ userId });
 
+  // Every key here must have a matching badge requirement type, and every
+  // requirement type must appear here — a requirement with no key is a badge
+  // nobody can ever earn.
   return {
     playlist_count: playlistCount,
     streak_days: stats.currentStreak ?? 0,
     playlists_shared: stats.playlistsShared ?? 0,
     daily_logins: stats.dailyLogins ?? 0,
     songs_added: stats.songsAdded ?? 0,
+    measured_sessions: stats.measuredSessions ?? 0,
+    therapy_sessions: stats.therapySessions ?? 0,
+    check_in_days: stats.checkInDays ?? 0,
   };
 };
 

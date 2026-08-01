@@ -1,5 +1,6 @@
 import Gamification from "../models/Gamification.js";
 import Leaderboard from "../models/Leaderboard.js";
+import PointAward from "../models/PointAward.js";
 import logger from "../utils/logger.js";
 import { acquireLock } from "../utils/taskLock.js";
 
@@ -14,7 +15,76 @@ const REBUILD_INTERVAL_MS = 60 * 1000;
  * Gamification document, populated every referenced user, then sorted the whole
  * collection in JavaScript.
  */
+/** Inclusive start of the current ISO week / calendar month, in UTC. */
+const periodStart = (type, now = new Date()) => {
+  if (type === "monthly") {
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  }
+
+  if (type === "weekly") {
+    const start = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+    );
+    // ISO weeks start on Monday; getUTCDay() is 0 for Sunday.
+    start.setUTCDate(start.getUTCDate() - ((start.getUTCDay() + 6) % 7));
+    return start;
+  }
+
+  return null;
+};
+
+/**
+ * Ranks a bounded period by points actually earned within it.
+ *
+ * Weekly and monthly boards previously reused the all-time aggregation, so all
+ * three tabs showed identical data: the period keys existed but nothing ever
+ * scoped the query to them. Summing the award ledger is what makes a period
+ * board mean anything.
+ */
+const buildPeriodEntries = async (type) => {
+  const since = periodStart(type);
+
+  return PointAward.aggregate([
+    { $match: { awardedAt: { $gte: since } } },
+    { $group: { _id: "$userId", totalPoints: { $sum: "$points" } } },
+    { $sort: { totalPoints: -1 } },
+    { $limit: LEADERBOARD_SIZE },
+    { $lookup: { from: "users", localField: "_id", foreignField: "_id", as: "user" } },
+    { $unwind: "$user" },
+    {
+      $lookup: {
+        from: "gamifications",
+        localField: "_id",
+        foreignField: "userId",
+        as: "stats",
+      },
+    },
+    { $unwind: { path: "$stats", preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        _id: 0,
+        userId: "$_id",
+        username: "$user.name",
+        totalPoints: 1,
+        level: { $ifNull: ["$stats.level", 1] },
+        currentStreak: { $ifNull: ["$stats.currentStreak", 0] },
+        badgeCount: { $size: { $ifNull: ["$stats.badges", []] } },
+      },
+    },
+  ]);
+};
+
 export const updateLeaderboard = async (type = "alltime", period = "all") => {
+  if (type !== "alltime") {
+    const periodEntries = await buildPeriodEntries(type);
+    await Leaderboard.findOneAndUpdate(
+      { type, period },
+      { entries: periodEntries, lastUpdated: new Date() },
+      { upsert: true, new: true }
+    );
+    return periodEntries;
+  }
+
   const entries = await Gamification.aggregate([
     { $sort: { totalPoints: -1, level: -1, currentStreak: -1 } },
     { $limit: LEADERBOARD_SIZE },
@@ -102,9 +172,9 @@ export const currentPeriod = (type, now = new Date()) => {
 
 const VALID_TYPES = new Set(["alltime", "weekly", "monthly"]);
 
-export const getLeaderboard = async (requestedType = "alltime", requestedPeriod) => {
+export const getLeaderboard = async (requestedType = "alltime") => {
   const type = VALID_TYPES.has(requestedType) ? requestedType : "alltime";
-  const period = requestedPeriod ?? currentPeriod(type);
+  const period = currentPeriod(type);
 
   const leaderboard = await Leaderboard.findOne({ type, period }).lean();
   if (leaderboard) return leaderboard.entries;

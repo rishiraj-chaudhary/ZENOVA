@@ -7,6 +7,9 @@ const initialState={
     level: 1,
     streak: 0,
     badges: [],
+    // Level-bar data, computed server-side from the one source of truth for
+    // the thresholds.
+    progress: null,
     notifications: []
 };
 function gamificationReducer(state,action){
@@ -18,6 +21,7 @@ function gamificationReducer(state,action){
                 ...state,
                 points:action.payload.totalPoints,
                 level:action.payload.level,
+                progress:action.payload.progress ?? state.progress,
                 notifications:[
                     ...state.notifications,
                     {
@@ -56,19 +60,27 @@ function gamificationReducer(state,action){
                     }
                 ]
             }
-        case 'STREAK_UPDATED':
+        case 'STREAK_UPDATED': {
+            const { currentStreak, reset, graceUsed } = action.payload;
+
+            // A broken streak was being announced as an achievement —
+            // "Streak updated: 1 days!" — which reads as congratulation at the
+            // exact moment the user lost something.
+            const message = reset
+                ? "Streak restarted — day 1. Picking it back up is the hard part."
+                : graceUsed
+                  ? `Streak kept at ${currentStreak} days. We covered the gap for you.`
+                  : `${currentStreak} day streak!`;
+
             return {
                 ...state,
-                streak:action.payload.currentStreak,
-                notifications:[
+                streak: currentStreak,
+                notifications: [
                     ...state.notifications,
-                    {
-                        type:'streak',
-                        message:`Streak updated: ${action.payload.currentStreak} days!`,
-                        id:Date.now()
-                    }
-                ]
-            }
+                    { type: reset ? 'info' : 'streak', message, id: Date.now() },
+                ],
+            };
+        }
         case 'DISMISS_NOTIFICATION':
             return  {
                 ...state,

@@ -6,6 +6,8 @@ import {
 import { getMoodHistoryPage, recordMood } from "../services/moodService.js";
 import { completeSession, startSession } from "../services/outcomeService.js";
 import { recordFeedback, removeFeedback } from "../services/tasteService.js";
+import { checkAndAwardBadges } from "../services/badgeService.js";
+import { awardPoints } from "../services/pointsService.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import resolveRegion from "../utils/resolveRegion.js";
 
@@ -19,6 +21,13 @@ export const logMood = asyncHandler(async (req, res) => {
     context,
     source: "check-in",
   });
+
+  // Once per calendar day via the default entity key. Check-ins are what fill
+  // the mood history the insights are drawn from.
+  if (entry) {
+    await awardPoints(req.user._id, "DAILY_CHECK_IN", req.socketManager);
+    await checkAndAwardBadges(req.user._id, req.socketManager);
+  }
 
   res.status(201).json(entry);
 });
@@ -77,7 +86,14 @@ export const beginListeningSession = asyncHandler(async (req, res) => {
 export const finishListeningSession = asyncHandler(async (req, res) => {
   const { sessionId, moodAfter } = req.body;
 
-  res.json(await completeSession({ userId: req.user._id, sessionId, moodAfter }));
+  res.json(
+    await completeSession({
+      userId: req.user._id,
+      sessionId,
+      moodAfter,
+      socketManager: req.socketManager,
+    })
+  );
 });
 
 /** Public: support contacts must be reachable without an account. */
