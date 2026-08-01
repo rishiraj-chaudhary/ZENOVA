@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import * as musicAPI from "../api/musicAPI.js";
 import * as playlistAPI from "../api/playlistAPI.js";
+import * as wellbeingAPI from "../api/wellbeingAPI.js";
 import { colorsForMood } from "../constants/moodColors.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import useChatMessages from "../hooks/useChatMessages.js";
@@ -171,6 +172,13 @@ function Chatbot() {
    */
   const startTrack = (index) => {
     setCurrentPlayingIndex(index);
+
+    // Only the first play of a session needs recording; the server ignores the
+    // rest, and a failure here must not interrupt playback.
+    if (sessionId && !hasListened) {
+      wellbeingAPI.recordSessionListened(sessionId).catch(() => {});
+    }
+
     setHasListened(true);
   };
 

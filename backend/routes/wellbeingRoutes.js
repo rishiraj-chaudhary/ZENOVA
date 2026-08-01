@@ -5,6 +5,7 @@ import {
   beginListeningSession,
   clearSongFeedback,
   finishListeningSession,
+  recordSessionListened,
   getInsights,
   getMoodHistory,
   getSupportResources,
@@ -72,6 +73,13 @@ router.post(
   [body("sessionId").isMongoId(), body("moodBefore").isInt({ min: 1, max: 5 })],
   validateRequest,
   beginListeningSession
+);
+
+router.post(
+  "/sessions/listened",
+  [body("sessionId").isMongoId()],
+  validateRequest,
+  recordSessionListened
 );
 
 router.post(

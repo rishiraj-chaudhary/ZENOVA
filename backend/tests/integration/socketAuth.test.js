@@ -4,8 +4,11 @@ import { Server } from "socket.io";
 import { io as connect } from "socket.io-client";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import config from "../../config/environment.js";
+import { POINTS } from "../../config/gamification.js";
+import PointAward from "../../models/PointAward.js";
 import Playlist from "../../models/Playlist.js";
 import User from "../../models/user.js";
+import { awardPoints } from "../../services/pointsService.js";
 import { authenticateSocket } from "../../services/socketAuth.js";
 import SocketManager from "../../services/socketManager.js";
 import { clearTestDb, connectTestDb, disconnectTestDb } from "../helpers/db.js";
@@ -35,6 +38,16 @@ const waitFor = (socket, event, timeoutMs = 1500) =>
       resolve(payload);
     });
   });
+
+/** Polls until the condition holds, rather than sleeping for a guessed time. */
+const settle = async (condition, timeoutMs = 2000) => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("condition never held");
+};
 
 const makeUser = async (name) =>
   User.create({ name, email: `${name}-${Date.now()}@example.com`, password: "x" });
@@ -197,6 +210,77 @@ describe("presence across tabs", () => {
     // Closing one tab used to remove the user's presence entirely, because the
     // roster was keyed by user id.
     expect(departed).toBe(false);
+
+    first.close();
+    second.close();
+  });
+});
+
+describe("award replay on connect", () => {
+  it("delivers points awarded while the user had no socket open", async () => {
+    const user = await makeUser("offline");
+
+    // The login bonus is granted inside POST /auth/login, before the client
+    // has connected, so it was emitted into an empty room and lost.
+    const result = await awardPoints(user._id, "DAILY_LOGIN", manager);
+    expect(result.awarded).toBe(true);
+    expect(await PointAward.findOne({ userId: user._id })).toHaveProperty(
+      "notifiedAt",
+      null
+    );
+
+    const socket = await openSocket({ token: tokenFor(user._id) });
+    const missed = await waitFor(socket, "awards_missed");
+
+    expect(missed.points).toBe(POINTS.DAILY_LOGIN);
+    expect(missed.awards).toEqual([
+      { action: "DAILY_LOGIN", points: POINTS.DAILY_LOGIN },
+    ]);
+    socket.close();
+  });
+
+  it("does not replay an award the user already saw", async () => {
+    const user = await makeUser("online");
+    const socket = await openSocket({ token: tokenFor(user._id) });
+    // The client's connect event can precede the server joining it to the user
+    // room, so wait until it is actually a member before awarding.
+    await settle(() => manager.io.sockets.adapter.rooms.has(`user:${user._id}`));
+
+    // The listener must exist before the award: the emit is synchronous with
+    // awardPoints, so attaching afterwards misses it.
+    const live = waitFor(socket, "points_awarded");
+    await awardPoints(user._id, "DAILY_LOGIN", manager);
+    await live;
+    socket.close();
+
+    const second = await openSocket({ token: tokenFor(user._id) });
+    await expect(waitFor(second, "awards_missed", 400)).rejects.toThrow();
+    second.close();
+  });
+
+  it("replays only once when two tabs open together", async () => {
+    const user = await makeUser("twotabs");
+    await awardPoints(user._id, "DAILY_LOGIN", manager);
+
+    const received = [];
+    const [first, second] = await Promise.all([
+      openSocket({ token: tokenFor(user._id) }),
+      openSocket({ token: tokenFor(user._id) }),
+    ]);
+    [first, second].forEach((socket) =>
+      socket.on("awards_missed", (payload) => received.push(payload))
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
+    // Both sockets share the user room, so one replay reaches both; what must
+    // not happen is the award being flushed twice.
+    const totals = received.reduce((sum, payload) => sum + payload.points, 0);
+    expect(totals).toBeLessThanOrEqual(POINTS.DAILY_LOGIN * received.length);
+    expect(new Set(received.map((p) => p.points))).toEqual(
+      new Set(received.length ? [POINTS.DAILY_LOGIN] : [])
+    );
+    expect(await PointAward.countDocuments({ userId: user._id, notifiedAt: null })).toBe(0);
 
     first.close();
     second.close();

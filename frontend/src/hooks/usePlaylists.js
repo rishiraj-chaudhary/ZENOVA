@@ -81,6 +81,10 @@ const usePlaylists = () => {
       (payload) => mutate(() => playlistAPI.removeSong(payload)),
       [mutate]
     ),
+    reorderSongs: useCallback(
+      (payload) => mutate(() => playlistAPI.reorderSongs(payload)),
+      [mutate]
+    ),
   };
 };
 

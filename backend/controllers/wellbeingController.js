@@ -4,7 +4,11 @@ import {
   generateInsightNarrative,
 } from "../services/moodInsightsService.js";
 import { getMoodHistoryPage, recordMood } from "../services/moodService.js";
-import { completeSession, startSession } from "../services/outcomeService.js";
+import {
+  completeSession,
+  markSessionListened,
+  startSession,
+} from "../services/outcomeService.js";
 import { recordFeedback, removeFeedback } from "../services/tasteService.js";
 import { checkAndAwardBadges } from "../services/badgeService.js";
 import { awardPoints } from "../services/pointsService.js";
@@ -81,6 +85,16 @@ export const beginListeningSession = asyncHandler(async (req, res) => {
   res.status(201).json(
     await startSession({ userId: req.user._id, sessionId, moodBefore })
   );
+});
+
+export const recordSessionListened = asyncHandler(async (req, res) => {
+  const outcome = await markSessionListened({
+    userId: req.user._id,
+    sessionId: req.body.sessionId,
+    socketManager: req.socketManager,
+  });
+
+  res.json({ recorded: Boolean(outcome) });
 });
 
 export const finishListeningSession = asyncHandler(async (req, res) => {

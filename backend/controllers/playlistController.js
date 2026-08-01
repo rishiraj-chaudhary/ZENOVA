@@ -76,29 +76,75 @@ export const removeSongFromPlaylist = asyncHandler(async (req, res) => {
   res.json({ message: "Song removed successfully" });
 });
 
+export const reorderSongs = asyncHandler(async (req, res) => {
+  const { playlistId } = req.params;
+
+  const playlist = await playlistService.reorderPlaylistSongs({
+    playlistId,
+    musicIds: req.body.musicIds,
+    userId: req.user._id,
+  });
+
+  // Carries the resulting order so collaborators apply the same list rather
+  // than each refetching.
+  broadcasterFor(req).toPlaylist(playlistId, "songs_reordered", {
+    playlistId,
+    musicIds: playlist.songs.map((song) => song.musicId),
+    reorderedBy: describeActor(req.user),
+  });
+
+  res.json(playlist);
+});
+
 export const inviteByUsername = asyncHandler(async (req, res) => {
   const { playlistId, username } = req.body;
 
-  const collaborator = await playlistService.inviteCollaboratorByUsername({
+  const { invitee, playlistName } = await playlistService.inviteCollaboratorByUsername({
     playlistId,
     ownerId: req.user._id,
     username,
   });
 
-  broadcasterFor(req).toPlaylistAndUser(
+  // The recipient is notified so they can decide; nobody is added yet.
+  broadcasterFor(req).toUser(invitee._id, "invitation_received", {
     playlistId,
-    collaborator._id,
-    "collaborator_added",
-    {
-      playlistId,
-      collaborator: { userId: collaborator._id, username: collaborator.name },
-      addedBy: describeActor(req.user),
-    }
-  );
+    playlistName,
+    invitedBy: describeActor(req.user),
+  });
 
   res.json({
-    message: "Collaborator added successfully",
-    collaborator: { _id: collaborator._id, name: collaborator.name },
+    message: `Invitation sent to ${invitee.name}`,
+    invitee: { _id: invitee._id, name: invitee.name },
+  });
+});
+
+export const getPendingInvitations = asyncHandler(async (req, res) => {
+  res.json({ invitations: await playlistService.listPendingInvitations(req.user._id) });
+});
+
+export const respondToInvitation = asyncHandler(async (req, res) => {
+  const { invitationId } = req.params;
+  const accept = req.body.accept === true;
+
+  const { playlist } = await playlistService.respondToInvitation({
+    invitationId,
+    userId: req.user._id,
+    accept,
+  });
+
+  if (accept && playlist) {
+    // Announced only once they have actually joined, and as the event the
+    // collaborators panel already listens for.
+    broadcasterFor(req).toPlaylist(playlist._id, "collaborator_added", {
+      playlistId: playlist._id,
+      collaborator: describeActor(req.user),
+      addedBy: describeActor(req.user),
+    });
+  }
+
+  res.json({
+    message: accept ? "Invitation accepted" : "Invitation declined",
+    playlistId: playlist?._id ?? null,
   });
 });
 

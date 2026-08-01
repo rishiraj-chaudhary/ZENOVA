@@ -30,11 +30,23 @@ const pointAwardSchema = new mongoose.Schema({
 
   points: { type: Number, required: true },
   awardedAt: { type: Date, default: Date.now },
+
+  /**
+   * When the user was actually told. Awards granted while they had no socket
+   * open — the login bonus lands during POST /auth/login, before the client has
+   * connected — stay null and are replayed on their next connection.
+   */
+  notifiedAt: { type: Date, default: null },
 });
 
 // The anti-replay constraint: one award per user per action per entity.
 pointAwardSchema.index({ userId: 1, action: 1, entityKey: 1 }, { unique: true });
 // Period leaderboards aggregate over this.
 pointAwardSchema.index({ awardedAt: -1, userId: 1 });
+// The replay lookup on connect: only ever a handful of documents per user.
+pointAwardSchema.index(
+  { userId: 1, awardedAt: 1 },
+  { partialFilterExpression: { notifiedAt: null } }
+);
 
 export default mongoose.model("PointAward", pointAwardSchema);

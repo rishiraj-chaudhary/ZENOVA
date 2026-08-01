@@ -21,4 +21,8 @@ export const startSession = ({ sessionId, moodBefore }) =>
 export const completeSession = ({ sessionId, moodAfter }) =>
   apiClient.post("/wellbeing/sessions/complete", { sessionId, moodAfter });
 
+/** Listening is worth recording even when the after-rating never comes. */
+export const recordSessionListened = (sessionId) =>
+  apiClient.post("/wellbeing/sessions/listened", { sessionId });
+
 export const fetchSupportResources = () => apiClient.get("/wellbeing/support");

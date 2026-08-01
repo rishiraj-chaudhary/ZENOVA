@@ -16,6 +16,10 @@ export const addSong = ({ playlistId, songId }) =>
 export const removeSong = ({ playlistId, musicId }) =>
   apiClient.post("/playlists/removesong", { playlistId, musicId });
 
+/** Persists a new song order. Order used to be broadcast but never saved. */
+export const reorderSongs = ({ playlistId, musicIds }) =>
+  apiClient.put(`/playlists/${playlistId}/order`, { musicIds });
+
 export const fetchCollaborators = (playlistId) =>
   apiClient.get(`/playlists/${playlistId}/collaborators`);
 
@@ -33,3 +37,9 @@ export const generateInviteQR = (playlistId) =>
 
 export const acceptInvitation = (inviteCode) =>
   apiClient.get(`/playlists/invite/accept/${inviteCode}`);
+
+/** Invitations waiting on this user's decision. */
+export const fetchPendingInvitations = () => apiClient.get("/playlists/invitations");
+
+export const respondToInvitation = ({ invitationId, accept }) =>
+  apiClient.post(`/playlists/invitations/${invitationId}/respond`, { accept });

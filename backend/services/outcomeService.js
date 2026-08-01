@@ -33,6 +33,32 @@ export const startSession = async ({ userId, sessionId, moodBefore }) => {
 };
 
 /**
+ * Records that the user played something from this session.
+ *
+ * Distinct from completing it: listening is worth acknowledging, but only the
+ * after-rating produces the measurement the effect ledger is built from. The
+ * award is keyed on the session, so replaying a track cannot pay twice.
+ */
+export const markSessionListened = async ({ userId, sessionId, socketManager }) => {
+  const outcome = await SessionOutcome.findOneAndUpdate(
+    { sessionId, userId, listenedAt: null },
+    { listenedAt: new Date() },
+    { new: true }
+  );
+
+  // Already recorded, or never started. Neither is an error worth surfacing —
+  // the client fires this on every play.
+  if (!outcome) return null;
+
+  await awardPoints(userId, "THERAPY_SESSION_COMPLETED", socketManager, {
+    entityKey: sessionId.toString(),
+  });
+  await checkAndAwardBadges(userId, socketManager);
+
+  return outcome;
+};
+
+/**
  * Closes the loop: the single measurement that says whether this worked.
  *
  * Completing a session is also the only event that writes to the song-effect

@@ -1,4 +1,5 @@
 import logger from "../utils/logger.js";
+import { flushPendingAwards } from "./awardInbox.js";
 import { isPlaylistMember } from "./playlistService.js";
 
 const playlistRoom = (playlistId) => `playlist:${playlistId}`;
@@ -45,6 +46,12 @@ class SocketManager {
       );
 
       socket.on("disconnect", () => this.handleDisconnect(socket));
+
+      // Awards granted before this socket existed — the login bonus, chiefly —
+      // are replayed now that there is somebody to receive them.
+      flushPendingAwards(userId, this).catch((error) =>
+        logger.warn("could not replay pending awards", { detail: error.message })
+      );
 
       logger.debug("socket ready", { socketId: socket.id, username });
     });
@@ -142,8 +149,17 @@ class SocketManager {
     }
   }
 
+  /**
+   * Emits to every socket the user has open, reporting whether any existed.
+   * Callers need the answer: an award emitted into an empty room is not a
+   * notification, and must be replayed when they next connect.
+   */
   emitToUser(userId, event, data) {
-    this.io.to(userRoom(userId)).emit(event, data);
+    const room = userRoom(userId);
+    const delivered = (this.io.sockets.adapter.rooms.get(room)?.size ?? 0) > 0;
+
+    this.io.to(room).emit(event, data);
+    return delivered;
   }
 }
 

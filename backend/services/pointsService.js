@@ -3,6 +3,7 @@ import Gamification from "../models/Gamification.js";
 import PointAward from "../models/PointAward.js";
 import { dayKey, daysBetweenKeys } from "../utils/dayKey.js";
 import logger from "../utils/logger.js";
+import { recordAwardDelivery } from "./awardInbox.js";
 import { scheduleLeaderboardRefresh } from "./leaderboardService.js";
 
 const DUPLICATE_KEY = 11000;
@@ -40,9 +41,9 @@ const upsertStats = async (userId, update) => {
   }
 };
 
-const emit = (socketManager, userId, event, payload) => {
-  socketManager?.emitToUser?.(userId, event, payload);
-};
+/** Returns whether the user actually had a socket open to receive it. */
+const emit = (socketManager, userId, event, payload) =>
+  Boolean(socketManager?.emitToUser?.(userId, event, payload));
 
 /**
  * Claims the right to award, exactly once, for this user/action/entity.
@@ -99,7 +100,7 @@ const withinDailyCap = async (userId, action, awardId) => {
 };
 
 /** Level derivation, emission and leaderboard refresh — shared by every award. */
-const applyAwardEffects = async (userId, action, points, stats, socketManager) => {
+const applyAwardEffects = async (userId, action, points, stats, socketManager, awardId) => {
   // Level is a pure function of the authoritative post-increment total. $max
   // keeps it monotonic: a slower writer can never lower a level a faster one set.
   const level = calculateLevel(stats.totalPoints);
@@ -107,13 +108,16 @@ const applyAwardEffects = async (userId, action, points, stats, socketManager) =
 
   if (leveledUp) await Gamification.updateOne({ userId }, { $max: { level } });
 
-  emit(socketManager, userId, "points_awarded", {
+  const delivered = emit(socketManager, userId, "points_awarded", {
     points,
     action,
     totalPoints: stats.totalPoints,
     level,
     leveledUp,
   });
+
+  // Undelivered awards stay flagged and are replayed on the next connection.
+  await recordAwardDelivery(awardId, delivered);
 
   if (leveledUp) {
     emit(socketManager, userId, "level_up", { level, totalPoints: stats.totalPoints });
@@ -157,7 +161,14 @@ export const awardPoints = async (userId, action, socketManager, { entityKey } =
     $inc: { totalPoints: points, ...(counter && { [counter]: 1 }) },
   });
 
-  return applyAwardEffects(userId, normalizedAction, points, stats, socketManager);
+  return applyAwardEffects(
+    userId,
+    normalizedAction,
+    points,
+    stats,
+    socketManager,
+    award._id
+  );
 };
 
 /** Missing this many days or fewer is forgiven once per grace period. */

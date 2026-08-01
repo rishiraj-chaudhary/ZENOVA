@@ -36,6 +36,12 @@ const sessionOutcomeSchema = new mongoose.Schema(
     detectedMood: { type: String },
     songsPlayed: [{ type: mongoose.Schema.Types.ObjectId, ref: "MusicResource" }],
 
+    /**
+     * When the user actually played something. A session can be listened to
+     * without being rated afterwards, and those two are worth different
+     * amounts: listening is real use, measuring is what the ledger needs.
+     */
+    listenedAt: { type: Date },
     completedAt: { type: Date },
   },
   { timestamps: true }

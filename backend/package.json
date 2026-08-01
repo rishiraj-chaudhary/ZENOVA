@@ -10,12 +10,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "migrate": "node scripts/migrateMoodTracking.js",
-    "eval:safety": "node evals/runSafetyEval.js"
+    "eval:safety": "node evals/runSafetyEval.js",
+    "backfill:streaks": "node scripts/backfillStreakDays.js",
+    "e2e": "node scripts/e2e.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "ZENOVA backend — AI music therapy API",
+  "description": "ZENOVA backend \u2014 AI music therapy API",
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
     "axios": "^1.8.4",

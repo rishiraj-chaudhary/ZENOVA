@@ -31,6 +31,29 @@ function gamificationReducer(state,action){
                     }
                 ]
             }
+        /**
+         * Awards granted while no socket was open — the login bonus lands
+         * during the login request itself — arrive together on connect. One
+         * toast for the lot, rather than a stack of them.
+         */
+        case 'AWARDS_MISSED': {
+            const { points, awards } = action.payload;
+            if (!points) return state;
+
+            const detail = awards?.length > 1 ? ` (${awards.length} rewards)` : '';
+
+            return {
+                ...state,
+                notifications: [
+                    ...state.notifications,
+                    {
+                        type: 'points',
+                        message: `+${points} points while you were away${detail}`,
+                        id: Date.now(),
+                    },
+                ],
+            };
+        }
         case 'LEVEL_UP':
             return {
                 ...state,
@@ -104,6 +127,9 @@ export function GamificationProvider({children}){
             console.log('Received points_awarded:', data);
             dispatch({ type: 'POINTS_AWARDED', payload: data })
         });
+        socket.on('awards_missed', data =>
+            dispatch({ type: 'AWARDS_MISSED', payload: data })
+        );
         socket.on('level_up', data =>{
             console.log('Received level_up:', data);
             dispatch({ type: 'LEVEL_UP', payload: data })
@@ -118,6 +144,7 @@ export function GamificationProvider({children}){
         });
         return ()=>{
             socket.off('points_awarded');
+            socket.off('awards_missed');
             socket.off('level_up');
             socket.off('badge_earned');
             socket.off('streak_updated');

@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import config from "../config/environment.js";
 import MusicResource from "../models/MusicResource.js";
 import Playlist from "../models/Playlist.js";
+import PlaylistInvitation from "../models/PlaylistInvitation.js";
 import User from "../models/user.js";
 import AppError from "../utils/AppError.js";
 
@@ -116,6 +117,42 @@ export const addSongToPlaylist = async ({ playlistId, songId, userId }) => {
   return { playlist, song };
 };
 
+/**
+ * Persists a new song order.
+ *
+ * Ordering was previously broadcast over a socket and never written down, so
+ * every collaborator saw the drag and the order reverted on the next load.
+ *
+ * `musicIds` is treated as a preference, not as the whole truth: a client that
+ * started dragging before a collaborator added a song would otherwise submit a
+ * stale list and silently delete that song. Anything the client did not mention
+ * keeps its relative order and follows.
+ */
+export const reorderPlaylistSongs = async ({ playlistId, musicIds, userId }) => {
+  const playlist = await findWritablePlaylist(playlistId, userId);
+
+  const byId = new Map(playlist.songs.map((song) => [song.musicId?.toString(), song]));
+
+  const seen = new Set();
+  const ordered = [];
+  for (const id of musicIds) {
+    const key = id?.toString();
+    if (!byId.has(key)) throw AppError.badRequest("That song is not in this playlist");
+    if (seen.has(key)) throw AppError.badRequest("Duplicate song in the new order");
+    seen.add(key);
+    ordered.push(byId.get(key));
+  }
+
+  const untouched = playlist.songs.filter(
+    (song) => !seen.has(song.musicId?.toString())
+  );
+
+  playlist.songs = [...ordered, ...untouched];
+  await playlist.save();
+
+  return playlist;
+};
+
 export const removeSongFromPlaylist = async ({ playlistId, musicId, userId }) => {
   const playlist = await findWritablePlaylist(playlistId, userId);
 
@@ -129,6 +166,13 @@ export const removeSongFromPlaylist = async ({ playlistId, musicId, userId }) =>
   return playlist;
 };
 
+/**
+ * Creates a pending invitation. The recipient decides whether to join.
+ *
+ * This used to push the user straight into `collaborators`, so the owner saw
+ * "Invited successfully" while the recipient was simply added without being
+ * asked.
+ */
 export const inviteCollaboratorByUsername = async ({
   playlistId,
   ownerId,
@@ -150,10 +194,53 @@ export const inviteCollaboratorByUsername = async ({
     throw AppError.conflict("User is already a collaborator");
   }
 
-  playlist.collaborators.push(invitee._id);
-  await playlist.save();
+  try {
+    await PlaylistInvitation.create({
+      playlistId,
+      invitedUserId: invitee._id,
+      invitedByUserId: ownerId,
+    });
+  } catch (error) {
+    // The partial unique index rejects a second pending invitation.
+    if (error.code === 11000) {
+      throw AppError.conflict("That person already has a pending invitation");
+    }
+    throw error;
+  }
 
-  return invitee;
+  return { invitee, playlistName: playlist.name };
+};
+
+/** Invitations awaiting this user's decision. */
+export const listPendingInvitations = (userId) =>
+  PlaylistInvitation.find({ invitedUserId: userId, status: "pending" })
+    .populate("playlistId", "name songs")
+    .populate("invitedByUserId", "name")
+    .sort({ createdAt: -1 })
+    .lean();
+
+/**
+ * Records the recipient's decision, adding them as a collaborator only on
+ * acceptance.
+ */
+export const respondToInvitation = async ({ invitationId, userId, accept }) => {
+  const invitation = await PlaylistInvitation.findOneAndUpdate(
+    { _id: invitationId, invitedUserId: userId, status: "pending" },
+    { status: accept ? "accepted" : "declined", respondedAt: new Date() },
+    { new: true }
+  );
+
+  if (!invitation) throw AppError.notFound("Invitation not found");
+
+  if (!accept) return { invitation, playlist: null };
+
+  const playlist = await Playlist.findByIdAndUpdate(
+    invitation.playlistId,
+    { $addToSet: { collaborators: userId } },
+    { new: true }
+  );
+
+  return { invitation, playlist };
 };
 
 /** Issues a fresh code, invalidating any previously shared link. */

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import CollaboratorsList from "../components/CollaboratorsList.jsx";
+import InvitationsInbox from "../components/InvitationsInbox.jsx";
 import PlaylistInvitation from "../components/PlaylistInvitation.jsx";
 import PresenceIndicator from "../components/PresenceIndicator.jsx";
 import SpotifyPlayer from "../components/SpotifyPlayer.jsx";
@@ -31,10 +32,12 @@ const Playlists = () => {
     playlists,
     loading,
     error,
+    refresh,
     createPlaylist,
     createPlaylistFromVoice,
     deletePlaylist,
     removeSong,
+    reorderSongs,
   } = usePlaylists();
 
   const [newPlaylistName, setNewPlaylistName] = useState("");
@@ -141,6 +144,26 @@ const Playlists = () => {
       // usePlaylists already surfaced the message through `error`.
     } finally {
       setDeletingSongs((current) => ({ ...current, [musicId]: false }));
+    }
+  };
+
+  /**
+   * Moves a song one place up or down and saves the result.
+   *
+   * Buttons rather than drag-and-drop: the rows embed Spotify iframes, which
+   * swallow HTML5 drag events, and dragging is unusable on touch anyway.
+   */
+  const handleMoveSong = async (playlist, index, direction) => {
+    const target = index + direction;
+    if (target < 0 || target >= playlist.songs.length) return;
+
+    const musicIds = playlist.songs.map((song) => song.musicId ?? song._id);
+    [musicIds[index], musicIds[target]] = [musicIds[target], musicIds[index]];
+
+    try {
+      await reorderSongs({ playlistId: playlist._id, musicIds });
+    } catch {
+      // usePlaylists already surfaced the message through `error`.
     }
   };
 
@@ -345,6 +368,10 @@ const Playlists = () => {
 
         {/* Playlists Content */}
         <div className="flex-grow overflow-y-auto py-4 scrollbar-thin">
+            <div className="md:mx-6 md:max-w-6xl md:mx-auto px-4 md:px-0">
+                <InvitationsInbox onAccepted={refresh} />
+            </div>
+
             {loading ? (
                 <div className="flex flex-col justify-center items-center h-full text-gray-400">
                     <i className="fa-solid fa-compact-disc fa-spin text-4xl mb-2 text-purple-400"></i>
@@ -414,7 +441,7 @@ const Playlists = () => {
                                 />
                                     {playlist.songs && playlist.songs.length > 0 ? (
                                         <ul className="divide-y divide-white/5 p-3">
-                                            {playlist.songs.map((song) => {
+                                            {playlist.songs.map((song, songIndex) => {
                                                 const spotifyTrackId = extractSpotifyTrackId(song.spotifyUri || song.audioUrl);
                                                 return (
                                                     <li
@@ -438,6 +465,29 @@ const Playlists = () => {
                                                                 <p className="font-semibold text-white text-sm truncate">{song.title}</p>
                                                                 <p className="text-gray-400 font-light text-xs truncate">{song.artist}</p>
                                                             </div>
+
+                                                            {playlist.songs.length > 1 && (
+                                                                <div className="flex flex-col ml-2 shrink-0">
+                                                                    <button
+                                                                        type="button"
+                                                                        aria-label={`Move ${song.title} up`}
+                                                                        disabled={songIndex === 0}
+                                                                        onClick={() => handleMoveSong(playlist, songIndex, -1)}
+                                                                        className="text-gray-400 hover:text-white disabled:opacity-25 disabled:hover:text-gray-400 px-1"
+                                                                    >
+                                                                        <i className="fa-solid fa-chevron-up text-[0.65rem]"></i>
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        aria-label={`Move ${song.title} down`}
+                                                                        disabled={songIndex === playlist.songs.length - 1}
+                                                                        onClick={() => handleMoveSong(playlist, songIndex, 1)}
+                                                                        className="text-gray-400 hover:text-white disabled:opacity-25 disabled:hover:text-gray-400 px-1"
+                                                                    >
+                                                                        <i className="fa-solid fa-chevron-down text-[0.65rem]"></i>
+                                                                    </button>
+                                                                </div>
+                                                            )}
                                                         </div>
 
                                                         {/* Middle Section: Spotify Player (full width if present) */}

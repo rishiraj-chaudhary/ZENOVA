@@ -9,10 +9,13 @@ import {
   generateInviteLink,
   generateInviteQR,
   getCollaborators,
+  getPendingInvitations,
   getUserPlaylists,
   inviteByUsername,
+  respondToInvitation,
   removeCollaborator,
   removeSongFromPlaylist,
+  reorderSongs,
 } from "../controllers/playlistController.js";
 import protect from "../middlewares/authMiddleware.js";
 import { trackAction } from "../middlewares/gamificationMiddleware.js";
@@ -72,6 +75,17 @@ router.post(
   removeSongFromPlaylist
 );
 
+router.put(
+  "/:playlistId/order",
+  [
+    objectId("playlistId", param),
+    body("musicIds").isArray({ max: 500 }).withMessage("musicIds must be an array"),
+    body("musicIds.*").isMongoId().withMessage("Invalid song id"),
+  ],
+  validateRequest,
+  reorderSongs
+);
+
 router.post(
   "/invite/username",
   [
@@ -100,6 +114,15 @@ router.post(
 );
 
 router.get("/invite/accept/:inviteCode", acceptInvitation);
+
+router.get("/invitations", getPendingInvitations);
+
+router.post(
+  "/invitations/:invitationId/respond",
+  [objectId("invitationId", param), body("accept").isBoolean()],
+  validateRequest,
+  respondToInvitation
+);
 
 router.get(
   "/:playlistId/collaborators",
