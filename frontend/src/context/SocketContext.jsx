@@ -1,13 +1,7 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { io } from "socket.io-client";
 import { SOCKET_URL } from "../config/api.js";
+import { getAccessToken } from "../utils/authStorage.js";
 import { useAuth } from "./AuthContext.jsx";
 
 export const SocketContext = createContext(null);
@@ -34,17 +28,17 @@ export const SocketProvider = ({ children }) => {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      // A function rather than a value, so reconnects pick up a rotated access
+      // token instead of replaying the one captured at mount.
+      auth: (callback) => callback({ token: getAccessToken() }),
     });
 
-    instance.on("connect", () => {
-      setConnected(true);
-      // Joins the personal room the server emits gamification events to.
-      instance.emit("register_user", { userId: user._id });
-    });
-
+    instance.on("connect", () => setConnected(true));
     instance.on("disconnect", () => setConnected(false));
+
     instance.on("connect_error", (error) => {
-      console.error("Socket connection error:", error.message);
+      // The server rejects unauthenticated handshakes outright.
+      logSocketError(error);
       setConnected(false);
     });
 
@@ -58,48 +52,35 @@ export const SocketProvider = ({ children }) => {
   }, [user]);
 
   /**
-   * Every collaboration event carries the same actor fields and requires the
-   * same "connected and signed in" guard, so both live here once instead of
-   * being repeated in each emitter.
+   * Only room membership is client-driven.
+   *
+   * Mutations used to be emitted from here *and* broadcast by the controller
+   * that performed them, so every change went out twice and each client
+   * refetched twice. The server is now the single source of realtime events;
+   * the client only says which room it wants to listen to. It could not be
+   * trusted for mutations anyway — identity is taken from the authenticated
+   * socket, not the payload.
    */
-  const emit = useCallback(
-    (event, payload = {}) => {
-      if (!socket || !connected || !user) return;
-      socket.emit(event, { ...payload, userId: user._id, username: user.name });
-    },
-    [socket, connected, user]
-  );
-
   const value = useMemo(
     () => ({
       socket,
       connected,
-      joinPlaylist: (playlistId) => emit("join_playlist", { playlistId }),
-      leavePlaylist: (playlistId) => emit("leave_playlist", { playlistId }),
-      addSong: (playlistId, song) => emit("add_song", { playlistId, song }),
-      removeSong: (playlistId, songId) => emit("remove_song", { playlistId, songId }),
-      reorderSongs: (playlistId, newOrder) =>
-        emit("reorder_songs", { playlistId, newOrder }),
-      notifyCollaboratorAdded: (playlistId, collaboratorId, collaboratorName) =>
-        emit("collaborator_added", { playlistId, collaboratorId, collaboratorName }),
-      notifyCollaboratorRemoved: (
-        playlistId,
-        removedCollaboratorId,
-        removedCollaboratorName
-      ) =>
-        emit("collaborator_removed", {
-          playlistId,
-          removedCollaboratorId,
-          removedCollaboratorName,
-        }),
-      notifyInvitationAccepted: (playlistId) =>
-        emit("invitation_accepted", { playlistId }),
-      notifyPlaylistUpdate: (playlistId) => emit("playlist_updated", { playlistId }),
+      joinPlaylist: (playlistId) => socket?.emit("join_playlist", { playlistId }),
+      leavePlaylist: (playlistId) => socket?.emit("leave_playlist", { playlistId }),
     }),
-    [socket, connected, emit]
+    [socket, connected]
   );
 
   return <SocketContext.Provider value={value}>{children}</SocketContext.Provider>;
+};
+
+const logSocketError = (error) => {
+  const message = error?.message ?? "unknown";
+  if (message === "Authentication required") {
+    console.warn("Realtime disabled: socket authentication failed");
+  } else {
+    console.error("Socket connection error:", message);
+  }
 };
 
 export default SocketContext;

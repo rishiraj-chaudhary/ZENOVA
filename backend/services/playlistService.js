@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import mongoose from "mongoose";
 import QRCode from "qrcode";
 import config from "../config/environment.js";
 import MusicResource from "../models/MusicResource.js";
@@ -24,6 +25,23 @@ const findOwnedPlaylist = async (playlistId, ownerId) => {
     throw AppError.notFound("Playlist not found or you do not have permission");
   }
   return playlist;
+};
+
+/**
+ * Whether a user may receive this playlist's realtime traffic.
+ *
+ * An existence check rather than a fetch: the socket layer needs the boolean,
+ * not the document, and this runs on every room join.
+ */
+export const isPlaylistMember = async (playlistId, userId) => {
+  if (!mongoose.isValidObjectId(playlistId) || !userId) return false;
+
+  return Boolean(
+    await Playlist.exists({
+      _id: playlistId,
+      $or: [{ userId }, { collaborators: userId }],
+    })
+  );
 };
 
 const findWritablePlaylist = async (playlistId, userId) => {

@@ -170,5 +170,9 @@ export const removeCollaborator = asyncHandler(async (req, res) => {
     }
   );
 
+  // Leaving them in the room would keep delivering updates for a playlist they
+  // no longer have access to.
+  await req.socketManager?.evictUser?.(playlistId, collaborator._id);
+
   res.json({ message: "Collaborator removed successfully" });
 });

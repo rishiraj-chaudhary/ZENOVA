@@ -1,302 +1,150 @@
-class SocketManager{
-    constructor(io){
-        this.io=io;
-        this.rooms=new Map();//Map to track users in each playlist room
-        this.initialize();
-    }
-    initialize(){
-            this.io.on('connection',(socket)=>{
-                console.log('A user connected:',socket.id);
-    
-            //handle joining a playlist room
-            socket.on('join_playlist',(data)=>{
-                const {playlistId,userId,username}=data;
-                this.handleJoinPlaylist(socket,playlistId,userId,username);
-            });
-            socket.on('register_user', (data) => {
-                const { userId } = data;
-                if (userId) {
-                    socket.join(`user:${userId}`);
-                    console.log(`Socket ${socket.id} joined user room user:${userId}`);
-                }
-            });
+import logger from "../utils/logger.js";
+import { isPlaylistMember } from "./playlistService.js";
 
-            //Handle leaving a playlist room
-            socket.on('leave_playlist',(data)=>{
-                const {playlistId,userId}=data;
-                this.handleLeavePlaylist(socket,playlistId,userId);
-            });
-            //handle adding a song to playlist
-            socket.on('add_song',(data)=>{
-                const {playlistId,song,userId,username}=data;
-                this.handleAddSong(socket,playlistId,song,userId,username);
-            });
-            //handle removing a song from playlist
-            socket.on('remove_song',(data)=>{
-                const {playlistId,songId,userId,username}=data;
-                this.handleRemoveSong(socket,playlistId,songId,userId,username);
-            });
-            //handle reordering songs
-            socket.on('reorder_songs',(data)=>{
-                const { playlistId, newOrder, userId, username } = data;
-                this.handleReorderSongs(socket, playlistId, newOrder, userId, username);
-            });
-            //Handle collaborator added event
-            socket.on('collaborator_added',(data)=>{
-                const {playlistId,userId,username,collaboratorId,collaboratorName}=data;
-                this.handleCollaboratorAdded(socket,playlistId,userId,username,collaboratorId,collaboratorName);
-            })
-            //Handle accepting invite
-            socket.on('invitation_accepted',(data)=>{
-                const { playlistId, userId, username } = data;
-                this.handleInvitationAccepted(socket, playlistId, userId, username);
-            })
-            //Handle removing a collaborator
-            socket.on('collaborator_removed',(data)=>{
-                const {playlistId, userId, username, removedCollaboratorId, removedCollaboratorName}=data;
-                this.handleCollaboratorRemoved(socket, playlistId, userId, username, removedCollaboratorId, removedCollaboratorName);
-            })
-            //Handle playlist updated
-            socket.on('playlist_updated',(data)=>{
-                const { playlistId, userId, username } = data;
-                this.handlePlaylistUpdated(socket, playlistId, userId, username);
-            });
-            
-            //Handle disconnection
-            socket.on('disconnect',()=>{
-                this.handleDisconnect(socket);
-            });
+const playlistRoom = (playlistId) => `playlist:${playlistId}`;
+const userRoom = (userId) => `user:${userId}`;
 
-        });
-    }
+/**
+ * Real-time collaboration over Socket.IO.
+ *
+ * Two rules hold everywhere in this class:
+ *
+ *  1. Identity comes from `socket.data`, set by the authenticated handshake —
+ *     never from the event payload. Handlers previously read `userId` and
+ *     `username` off client-supplied data, so a socket could act as anyone.
+ *  2. Joining a playlist room requires membership. There was no check at all,
+ *     so any socket could subscribe to any playlist's traffic.
+ *
+ * Presence is keyed by socket id rather than user id, so a user with two tabs
+ * open is present once and closing one tab does not remove them.
+ */
+class SocketManager {
+  constructor(io) {
+    this.io = io;
+    /** roomId -> Map<socketId, { userId, username }> */
+    this.rooms = new Map();
+    this.initialize();
+  }
 
-    handlePlaylistUpdated(socket,playlistId,userId,username){
-        const roomId=`playlist:${playlistId}`;
-            //Add user to the room tracking
-            if(!this.rooms.has(roomId)){
-                this.rooms.set(roomId,new Map());
-            }
-            this.rooms.get(roomId).set(userId,{
-                socketId:socket._id,
-                username
-            });
-            //Get all users in the room
-            const usersInRoom=Array.from(this.rooms.get(roomId).entries()).map(([id,data])=>({
-                userId:id,
-                username:data.username
-            }));
+  initialize() {
+    this.io.on("connection", (socket) => {
+      const { userId, username } = socket.data;
+      logger.debug("socket connected", { socketId: socket.id, userId });
 
-            //Broadcast to everyone in the room that someone has joined
-            this.io.to(roomId).emit('playlist_updated',{
-                userId,
-                username,
-                users: usersInRoom,
-            });
-    }
-    emitToUser(userId, event, data) {
-        const userRoom = `user:${userId}`;
-        this.io.to(userRoom).emit(event, data);
-        console.log(`Emitted ${event} to user ${userId}:`, data);
+      // Every socket joins its own room automatically. This used to be a
+      // client-triggered `register_user` carrying an arbitrary id, which let a
+      // socket subscribe to another user's private notifications.
+      socket.join(userRoom(userId));
+
+      socket.on("join_playlist", ({ playlistId }) =>
+        this.handleJoinPlaylist(socket, playlistId)
+      );
+
+      socket.on("leave_playlist", ({ playlistId }) =>
+        this.handleLeavePlaylist(socket, playlistId)
+      );
+
+      socket.on("disconnect", () => this.handleDisconnect(socket));
+
+      logger.debug("socket ready", { socketId: socket.id, username });
+    });
+  }
+
+  /** Collapses per-socket entries into one entry per user. */
+  getRoster(roomId) {
+    const sockets = this.rooms.get(roomId);
+    if (!sockets) return [];
+
+    const byUser = new Map();
+    sockets.forEach(({ userId, username }) => byUser.set(userId, username));
+
+    return [...byUser.entries()].map(([id, name]) => ({
+      userId: id,
+      username: name,
+    }));
+  }
+
+  async handleJoinPlaylist(socket, playlistId) {
+    const { userId, username } = socket.data;
+
+    // Authorization, not just authentication: being signed in does not entitle
+    // you to another person's playlist traffic.
+    if (!(await isPlaylistMember(playlistId, userId))) {
+      logger.warn("socket denied playlist room", { userId, playlistId });
+      socket.emit("join_denied", { playlistId });
+      return;
     }
 
+    const roomId = playlistRoom(playlistId);
+    socket.join(roomId);
 
-    handleCollaboratorRemoved(socket, playlistId, userId, username, removedCollaboratorId, removedCollaboratorName){
-        const roomId=`playlist:${playlistId}`;
-        //Broadcast to everyone in the room that a collaborator was removed
-        this.io.to(roomId).emit('collaborator_removed',{
-            playlistId,
-            removedCollaborator: {
-                userId: removedCollaboratorId,
-                username: removedCollaboratorName
-            },
-            removedBy: {
-                userId,
-                username
-            }
-        });
+    if (!this.rooms.has(roomId)) this.rooms.set(roomId, new Map());
+    this.rooms.get(roomId).set(socket.id, { userId, username });
 
-        console.log(`User ${username} (${userId}) removed ${removedCollaboratorName} as collaborator from playlist ${playlistId}`);
+    this.io.to(roomId).emit("user_joined", {
+      userId,
+      username,
+      users: this.getRoster(roomId),
+    });
+  }
+
+  handleLeavePlaylist(socket, playlistId) {
+    const roomId = playlistRoom(playlistId);
+    socket.leave(roomId);
+    this.removeFromRoom(socket, roomId);
+  }
+
+  /** Shared by explicit leaves and disconnects, so both keep the roster honest. */
+  removeFromRoom(socket, roomId) {
+    const sockets = this.rooms.get(roomId);
+    if (!sockets?.has(socket.id)) return;
+
+    const { userId, username } = sockets.get(socket.id);
+    sockets.delete(socket.id);
+
+    if (sockets.size === 0) {
+      this.rooms.delete(roomId);
+      return;
     }
 
+    const roster = this.getRoster(roomId);
 
-    handleCollaboratorAdded(socket, playlistId, userId, username, collaboratorId, collaboratorName){
-        const roomId=`playlist:${playlistId}`;
-        //Broadcast to everyone in the room that a collaborator was added
-        this.io.to(roomId).emit('collaborator_added',{
-            playlistId,
-            collaborator: {
-                userId: collaboratorId,
-                username: collaboratorName
-            },
-            addedBy: {
-                userId,
-                username
-            }
-        });
-        console.log(`User ${username} (${userId}) added ${collaboratorName} as collaborator to playlist ${playlistId}`);
+    // Only announce a departure once the user's last tab has gone.
+    if (!roster.some((entry) => entry.userId === userId)) {
+      this.io.to(roomId).emit("user_left", { userId, username, users: roster });
     }
-    
-    handleJoinPlaylist(socket,playlistId,userId,username){
-        const roomId=`playlist:${playlistId}`;
+  }
 
-        //Joing the socket to the room
-        socket.join(roomId);
-        //Store the user data in socket for easy access
-        socket.userData={
-            currentRoom: roomId,
-            userId,
-            username
-        };
-        //Track users in the room
-        if(!this.rooms.has(roomId)){
-            this.rooms.set(roomId,new Map());
-        }
-        this.rooms.get(roomId).set(userId,{
-            socketId:socket.id,
-            username
-        });
+  handleDisconnect(socket) {
+    // A socket may be in several rooms; clean up every one it was tracked in.
+    [...this.rooms.keys()].forEach((roomId) => this.removeFromRoom(socket, roomId));
+    logger.debug("socket disconnected", { socketId: socket.id });
+  }
 
-        //Get all users in the room
-        const usersInRoom=Array.from(this.rooms.get(roomId).entries()).map(([id,data])=>({
-            userId:id,
-            username:data.username
-        }));
-        //Broadcast to everyone in the room that someone has joined the room
-        this.io.to(roomId).emit('user_joined',{
-            userId,
-            username,
-            users:usersInRoom
-        });
-        console.log(`User ${username} (${userId}) joined playlist ${playlistId}`);
+  /** Forces a removed collaborator out of a room they no longer belong to. */
+  async evictUser(playlistId, userId) {
+    const roomId = playlistRoom(playlistId);
+    const sockets = this.rooms.get(roomId);
+    if (!sockets) return;
+
+    const socketIds = [...sockets.entries()]
+      .filter(([, entry]) => entry.userId === userId.toString())
+      .map(([socketId]) => socketId);
+
+    for (const socketId of socketIds) {
+      const socket = this.io.sockets.sockets.get(socketId);
+      if (socket) {
+        socket.leave(roomId);
+        this.removeFromRoom(socket, roomId);
+      } else {
+        sockets.delete(socketId);
+      }
     }
+  }
 
-
-        handleLeavePlaylist(socket,playlistId,userId){
-            const roomId=`playlist:${playlistId}`;
-            //Remove user from the room tracking
-            if(this.rooms.has(roomId)){
-                const username=this.rooms.get(roomId).get(userId)?.username;
-                this.rooms.get(roomId).delete(userId);
-
-                //If room is empty, remove it
-                if(this.rooms.get(roomId).size===0){
-                    this.rooms.delete(roomId);
-                }else{
-                    //Get remaining users
-                    const usersInRoom=Array.from(this.rooms.get(roomId).entries()).map(([id,data])=>({
-                        userId:id,
-                        username:data.username
-                    }));
-                
-                    //Notify others that user left
-                    this.io.to(roomId).emit('user_left',{
-                        userId,
-                        username,
-                        users:usersInRoom
-                    })
-                }
-            }
-            //Leave the socket room
-            socket.leave(roomId);
-            socket.userData=null;
-            console.log(`User ${userId} left playlist ${playlistId}`);
-        }
-
-        handleDisconnect(socket){
-            console.log('User disconnected: ',socket.id);
-            //If user was in a playlist room, handle leaving
-            if(socket.userData){
-                const {currentRoom,userId,username}=socket.userData;
-                const playlistId=currentRoom.split(':')[1];
-                if(this.rooms.has(currentRoom)){
-                    this.rooms.get(currentRoom).delete(userId);
-
-                    //If room get empty --> remove it
-                    if(this.rooms.get(currentRoom).size===0){
-                        this.rooms.delete(currentRoom);
-                    }else{
-                        //get remaining users
-                        const usersInRoom=Array.from(this.rooms.get(currentRoom).entries()).map(([id,data])=>({
-                            userId:id,
-                            username:data.username
-                        }));
-
-                        //notify them that user has left
-                        this.io.to(currentRoom).emit('user_left',{
-                            userId,
-                            username,
-                            users:usersInRoom
-                        });
-                    }
-                }
-            }
-        }
-        
-        handleAddSong(socket, playlistId, song, userId, username){
-            const roomId=`playlist:${playlistId}`;
-            //broadcast to everyone that song has been added
-            this.io.to(roomId).emit('song_added',{
-                playlistId,
-                song,
-                addedBy: {
-                    userId,
-                    username
-                }
-            })
-            console.log(`User ${username} (${userId}) added a song to playlist ${playlistId}`);
-        }
-
-        handleRemoveSong(socket, playlistId, songId, userId, username){
-            const roomId=`playlist:${playlistId}`;
-            //broadcast to everyone that song has been removed
-            this.io.to(roomId).emit('song_removed',{
-                playlistId,
-                songId,
-                removedBy: {
-                    userId,
-                    username
-                }
-            });
-            console.log(`User ${username} (${userId}) removed a song from playlist ${playlistId}`);
-        }
-        handleReorderSongs(socket, playlistId, newOrder, userId, username){
-            const roomId=`playlist:${playlistId}`;
-            //broadcast to everyone that song has been removed
-            this.io.to(roomId).emit('songs_reordered',{
-                playlistId,
-                newOrder,
-                reorderedBy: {
-                    userId,
-                    username
-                }
-            });
-            console.log(`User ${username} (${userId}) reordered songs in playlist ${playlistId}`);
-        }
-
-        handleInvitationAccepted(socket,playlistId,userId,username){
-            const roomId=`playlist:${playlistId}`;
-            //Add user to the room tracking
-            if(!this.rooms.has(roomId)){
-                this.rooms.set(roomId,new Map());
-            }
-            this.rooms.get(roomId).set(userId,{
-                socketId:socket._id,
-                username
-            });
-            //Get all users in the room
-            const usersInRoom=Array.from(this.rooms.get(roomId).entries()).map(([id,data])=>({
-                userId:id,
-                username:data.username
-            }));
-
-            //Broadcast to everyone in the room that someone has joined
-            this.io.to(roomId).emit('user_joined',{
-                userId,
-                username,
-                users: usersInRoom,
-                joinedVia: 'invitation'
-            });
-            console.log(`User ${username} (${userId}) accepted invitation to playlist ${playlistId}`);
-        }
+  emitToUser(userId, event, data) {
+    this.io.to(userRoom(userId)).emit(event, data);
+  }
 }
+
 export default SocketManager;

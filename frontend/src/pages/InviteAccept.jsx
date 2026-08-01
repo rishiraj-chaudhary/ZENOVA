@@ -9,7 +9,7 @@ const REDIRECT_DELAY_MS = 2000;
 const InviteAccept = () => {
     const { inviteCode } = useParams();
     const { user, loading: authLoading } = useAuth();
-    const { joinPlaylist, notifyInvitationAccepted, notifyPlaylistUpdate } = useSocket();
+    const { joinPlaylist } = useSocket();
     const navigate = useNavigate();
 
     const [loading, setLoading] = useState(true);
@@ -32,9 +32,9 @@ const InviteAccept = () => {
             try {
                 const { playlistId } = await acceptInvitation(inviteCode);
 
+                // The accept endpoint broadcasts to the room; the client only
+                // needs to start listening to it.
                 joinPlaylist(playlistId);
-                notifyInvitationAccepted(playlistId);
-                notifyPlaylistUpdate(playlistId);
 
                 sessionStorage.setItem("expandPlaylist", playlistId);
                 redirectTimer = setTimeout(() => navigate("/playlist"), REDIRECT_DELAY_MS);

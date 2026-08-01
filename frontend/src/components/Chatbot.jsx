@@ -3,7 +3,6 @@ import * as musicAPI from "../api/musicAPI.js";
 import * as playlistAPI from "../api/playlistAPI.js";
 import { colorsForMood } from "../constants/moodColors.js";
 import { useAuth } from "../context/AuthContext.jsx";
-import { useSocket } from "../context/SocketContext.jsx";
 import useChatMessages from "../hooks/useChatMessages.js";
 import useSpeechRecognition from "../hooks/useSpeechRecognition.js";
 import ChatComposer from "./chat/ChatComposer.jsx";
@@ -26,7 +25,6 @@ const SAVE_ALL = Symbol("save-all");
  */
 function Chatbot() {
   const { user } = useAuth();
-  const { addSong } = useSocket();
   const userId = user?._id;
 
   const { messages, appendMessage, recommendations, setRecommendations, mood, setMood } =
@@ -136,10 +134,6 @@ function Chatbot() {
       setPlaylistError(failures[0]?.reason?.message ?? "Could not save");
       return;
     }
-
-    recommendations
-      .filter((song) => targets.includes(song.musicId))
-      .forEach((song) => addSong(playlistId, song));
 
     setPlaylistError(null);
     setPendingSong(null);

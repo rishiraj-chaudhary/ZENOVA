@@ -1,12 +1,10 @@
 import { useState } from "react";
 import * as playlistAPI from "../api/playlistAPI.js";
-import { useSocket } from "../context/SocketContext.jsx";
 import useUserSearch from "../hooks/useUserSearch.js";
 
 const FEEDBACK_TIMEOUT_MS = 3000;
 
 const PlaylistInvitation = ({ playlistId, playlistName, isOwner }) => {
-    const { notifyCollaboratorAdded } = useSocket();
 
     const [username, setUsername] = useState("");
     const [inviteLink, setInviteLink] = useState("");
@@ -41,14 +39,7 @@ const PlaylistInvitation = ({ playlistId, playlistName, isOwner }) => {
         if (!username.trim()) return undefined;
 
         return runInviteAction(async () => {
-            const { collaborator } = await playlistAPI.inviteByUsername({
-                playlistId,
-                username,
-            });
-
-            if (collaborator?._id) {
-                notifyCollaboratorAdded(playlistId, collaborator._id, collaborator.name);
-            }
+            await playlistAPI.inviteByUsername({ playlistId, username });
 
             announce(`Invited ${username} successfully`);
             setUsername("");

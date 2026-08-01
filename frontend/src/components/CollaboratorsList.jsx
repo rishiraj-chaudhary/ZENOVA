@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import * as playlistAPI from "../api/playlistAPI.js";
-import { useSocket } from "../context/SocketContext.jsx";
 import useSocketEvents from "../hooks/useSocketEvents.js";
 
 const CollaboratorsList = ({ playlistId, isOwner }) => {
-    const { notifyCollaboratorRemoved } = useSocket();
     const [collaborators, setCollaborators] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
@@ -40,8 +38,9 @@ const CollaboratorsList = ({ playlistId, isOwner }) => {
 
         try {
             setLoading(true);
+            // The server broadcasts collaborator_removed and evicts their
+            // sockets; emitting from here as well produced a duplicate event.
             await playlistAPI.removeCollaborator({ playlistId, userId });
-            notifyCollaboratorRemoved(playlistId, userId, username);
             setCollaborators((current) => current.filter((c) => c._id !== userId));
             setError(null);
         } catch (removeError) {

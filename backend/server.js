@@ -19,6 +19,7 @@ import errorHandler from "./middlewares/errorHandler.js";
 import notFoundHandler from "./middlewares/notFoundHandler.js";
 import requestLogger from "./middlewares/requestLogger.js";
 import { initializeDefaultBadges } from "./services/badgeService.js";
+import { authenticateSocket } from "./services/socketAuth.js";
 import SocketManager from "./services/socketManager.js";
 import { getLlmMetrics, startMetricsReporter } from "./utils/llmMetrics.js";
 import logger from "./utils/logger.js";
@@ -39,6 +40,11 @@ const FRONTEND_DIST = path.join(__dirname, "../frontend/dist");
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: corsOptions });
+
+// Every socket must prove who it is before any handler runs. Without this the
+// server had no notion of identity and trusted whatever the client claimed.
+io.use(authenticateSocket);
+
 const socketManager = new SocketManager(io);
 
 /**
