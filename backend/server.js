@@ -18,12 +18,14 @@ import { corsOptions, generalLimiter } from "./config/security.js";
 import errorHandler from "./middlewares/errorHandler.js";
 import notFoundHandler from "./middlewares/notFoundHandler.js";
 import requestLogger from "./middlewares/requestLogger.js";
+import { initializeAgent } from "./services/agent/index.js";
 import { initializeDefaultBadges } from "./services/badgeService.js";
 import { authenticateSocket } from "./services/socketAuth.js";
 import SocketManager from "./services/socketManager.js";
 import { getLlmMetrics, startMetricsReporter } from "./utils/llmMetrics.js";
 import logger from "./utils/logger.js";
 
+import agentRoutes from "./routes/agentRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import gamificationRoutes from "./routes/gamificationRoutes.js";
 import geminiRoutes from "./routes/geminiRoutes.js";
@@ -142,6 +144,7 @@ const configureApp = () => {
 
   app.use("/api", generalLimiter);
   app.use("/api/auth", authRoutes);
+  app.use("/api/agent", agentRoutes);
   app.use("/api/music/recommend", musicRoutes);
   app.use("/api/users", userRoutes);
   app.use("/api/gemini", geminiRoutes);
@@ -203,6 +206,7 @@ const start = async () => {
   await connectDB();
   configureApp();
   await initializeDefaultBadges();
+  logger.info("agent tools registered", { count: initializeAgent() });
   startMetricsReporter();
 
   server.listen(config.port, () => {

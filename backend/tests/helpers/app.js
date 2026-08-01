@@ -5,6 +5,7 @@ import { corsOptions } from "../../config/security.js";
 import errorHandler from "../../middlewares/errorHandler.js";
 import notFoundHandler from "../../middlewares/notFoundHandler.js";
 
+import agentRoutes from "../../routes/agentRoutes.js";
 import authRoutes from "../../routes/authRoutes.js";
 import gamificationRoutes from "../../routes/gamificationRoutes.js";
 import geminiRoutes from "../../routes/geminiRoutes.js";
@@ -30,6 +31,7 @@ export const buildTestApp = () => {
   );
 
   app.use("/api/auth", authRoutes);
+  app.use("/api/agent", agentRoutes);
   app.use("/api/users", userRoutes);
   // Mounted so the recommendation and crisis paths are reachable. Omitting
   // them left the entire AI pipeline — including every safety surface —

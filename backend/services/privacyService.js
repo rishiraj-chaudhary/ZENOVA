@@ -1,4 +1,8 @@
+import AgentRun from "../models/AgentRun.js";
+import Conversation from "../models/Conversation.js";
+import AgentStep from "../models/AgentStep.js";
 import Impression from "../models/Impression.js";
+import ToolAudit from "../models/ToolAudit.js";
 import ListeningFeedback from "../models/ListeningFeedback.js";
 import Leaderboard from "../models/Leaderboard.js";
 import PlaylistInvitation from "../models/PlaylistInvitation.js";
@@ -100,6 +104,7 @@ const eraseWellbeing = async (userId, session) => {
     SessionOutcome.deleteMany({ userId }, options),
     Recommendation.deleteMany({ userId }, options),
     Impression.deleteMany({ userId }, options),
+    Conversation.deleteOne({ userId }, options),
   ]);
 
   // Counters derived from the records above are the same data in a different
@@ -154,6 +159,14 @@ export const deleteAccount = (userId) =>
       // it holds no userId and its running sums cannot be decomposed back to
       // an individual — see the exemption list in erasureCoverage.test.js.
       Impression.deleteMany({ userId }, options),
+
+      // The assistant's record of what it did on this person's behalf: the
+      // runs, their spans with recorded tool inputs and outputs, and the
+      // permanent audit of every change it made for them.
+      AgentRun.deleteMany({ userId }, options),
+      AgentStep.deleteMany({ userId }, options),
+      ToolAudit.deleteMany({ userId }, options),
+
       RefreshToken.deleteMany({ userId }, options),
       PlaylistInvitation.deleteMany(
         { $or: [{ invitedUserId: userId }, { invitedByUserId: userId }] },
