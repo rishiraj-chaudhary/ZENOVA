@@ -4,6 +4,7 @@ import { aiLimiter } from "../config/security.js";
 import { analyzeMood, chatWithAI } from "../controllers/geminiController.js";
 import { attachUserIfPresent } from "../middlewares/authMiddleware.js";
 import validateRequest from "../middlewares/validateRequest.js";
+import { OPTIONAL } from "../utils/validation.js";
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ const userInputRules = [
     .withMessage("userInput is required")
     .isLength({ max: 2000 })
     .withMessage("userInput is too long"),
-  body("conversationHistory").optional().isArray({ max: 50 }),
+  body("conversationHistory").optional(OPTIONAL).isArray({ max: 50 }),
 ];
 
 // Guests may use these endpoints, but the rate limiter caps how much of the

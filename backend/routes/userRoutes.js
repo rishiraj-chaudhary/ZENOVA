@@ -9,6 +9,7 @@ import {
 } from "../controllers/userController.js";
 import protect from "../middlewares/authMiddleware.js";
 import validateRequest from "../middlewares/validateRequest.js";
+import { OPTIONAL } from "../utils/validation.js";
 
 const router = express.Router();
 
@@ -38,7 +39,7 @@ router.put(
 
 router.post(
   "/onboarding",
-  [...preferenceRules, body("moodTrackingConsent").optional().isBoolean()],
+  [...preferenceRules, body("moodTrackingConsent").optional(OPTIONAL).isBoolean()],
   validateRequest,
   completeOnboarding
 );

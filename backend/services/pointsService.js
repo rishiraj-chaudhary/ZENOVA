@@ -7,6 +7,7 @@ import {
 import Gamification from "../models/Gamification.js";
 import PointAward from "../models/PointAward.js";
 import { dayKey, daysBetweenKeys } from "../utils/dayKey.js";
+import { toObjectId } from "../utils/toObjectId.js";
 import logger from "../utils/logger.js";
 import { recordAwardDelivery } from "./awardInbox.js";
 import { scheduleLeaderboardRefresh } from "./leaderboardService.js";
@@ -73,7 +74,9 @@ const pointsAwardedToday = async (userId, action) => {
   const [totals] = await PointAward.aggregate([
     {
       $match: {
-        userId,
+        // Cast explicitly: a pipeline does not, and a string id here would
+        // match nothing, silently disabling the daily cap.
+        userId: toObjectId(userId),
         action,
         awardedAt: { $gte: new Date(`${dayKey()}T00:00:00.000Z`) },
       },

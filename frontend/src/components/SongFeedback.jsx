@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as wellbeingAPI from "../api/wellbeingAPI.js";
 
 /**
@@ -11,15 +11,19 @@ import * as wellbeingAPI from "../api/wellbeingAPI.js";
  * Optimistic: the signal is advisory, so a failed write reverts quietly rather
  * than interrupting listening with an error.
  */
-const SongFeedback = ({ musicId, sessionId, moodAtTime, initialSignal = null }) => {
+const SongFeedback = ({ musicId, sessionId, moodAtTime, initialSignal = null, onChange }) => {
   const [signal, setSignal] = useState(initialSignal);
   const [pending, setPending] = useState(false);
+
+  // The saved rating arrives after the first render, so adopt it when it does.
+  useEffect(() => setSignal(initialSignal), [initialSignal]);
 
   const send = async (nextSignal) => {
     const previous = signal;
     const clearing = signal === nextSignal;
 
-    setSignal(clearing ? null : nextSignal);
+    const applied = clearing ? null : nextSignal;
+    setSignal(applied);
     setPending(true);
 
     try {
@@ -33,6 +37,7 @@ const SongFeedback = ({ musicId, sessionId, moodAtTime, initialSignal = null }) 
           moodAtTime,
         });
       }
+      onChange?.(musicId, applied);
     } catch {
       setSignal(previous);
     } finally {

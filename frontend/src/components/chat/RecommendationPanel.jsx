@@ -18,6 +18,8 @@ const RecommendationPanel = ({
   onAddToPlaylist,
   onTrackEnded,
   onPlay,
+  feedbackSignals,
+  onFeedbackChange,
   hasListened,
   onBeforeRated,
   onAfterRated,
@@ -100,6 +102,8 @@ const RecommendationPanel = ({
           moodColors={moodColors}
           sessionId={sessionId}
           moodAtTime={mood}
+          feedbackSignal={feedbackSignals?.[song.musicId] ?? null}
+          onFeedbackChange={onFeedbackChange}
           onAddToPlaylist={onAddToPlaylist}
           isCurrentlyPlaying={index === currentPlayingIndex}
           autoplayEnabled={autoplayEnabled}

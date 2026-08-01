@@ -3,6 +3,7 @@ import { query } from "express-validator";
 import { fetchLeaderBoard } from "../controllers/leaderboardController.js";
 import protect from "../middlewares/authMiddleware.js";
 import validateRequest from "../middlewares/validateRequest.js";
+import { OPTIONAL } from "../utils/validation.js";
 
 const router = express.Router();
 
@@ -12,7 +13,7 @@ router.use(protect);
 
 router.get(
   "/",
-  [query("type").optional().isIn(["alltime", "weekly", "monthly"])],
+  [query("type").optional(OPTIONAL).isIn(["alltime", "weekly", "monthly"])],
   validateRequest,
   fetchLeaderBoard
 );

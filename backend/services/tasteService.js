@@ -1,6 +1,7 @@
 import ListeningFeedback from "../models/ListeningFeedback.js";
 import MusicResource from "../models/MusicResource.js";
 import AppError from "../utils/AppError.js";
+import { toObjectId } from "../utils/toObjectId.js";
 
 const TOP_GENRE_LIMIT = 6;
 
@@ -27,6 +28,19 @@ export const recordFeedback = async ({
   );
 };
 
+/**
+ * The user's standing opinions, keyed by song.
+ *
+ * Nothing exposed these, so the buttons had no way to show what you had already
+ * rated: every reload came back blank and a rating looked like it had not
+ * saved. Returned as a map so the client can look a song up without scanning.
+ */
+export const getFeedbackSignals = async (userId) => {
+  const rows = await ListeningFeedback.find({ userId }).select("musicId signal").lean();
+
+  return Object.fromEntries(rows.map((row) => [row.musicId.toString(), row.signal]));
+};
+
 /** Reports whether anything was actually removed, so the caller can be honest. */
 export const removeFeedback = async ({ userId, musicId }) => {
   const { deletedCount } = await ListeningFeedback.deleteOne({ userId, musicId });
@@ -47,7 +61,9 @@ const topGenres = (rows) =>
  */
 export const buildTasteProfile = async (userId) => {
   const grouped = await ListeningFeedback.aggregate([
-    { $match: { userId } },
+    // Cast explicitly — see utils/toObjectId.js. A string here returned an
+    // empty profile, so a user's ratings never reached the prompt.
+    { $match: { userId: toObjectId(userId) } },
     { $group: { _id: { signal: "$signal", genre: "$genre" }, count: { $sum: 1 } } },
     { $sort: { count: -1 } },
   ]);

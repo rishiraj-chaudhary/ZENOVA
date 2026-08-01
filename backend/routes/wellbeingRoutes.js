@@ -4,6 +4,7 @@ import { aiLimiter } from "../config/security.js";
 import {
   beginListeningSession,
   clearSongFeedback,
+  getSongFeedback,
   finishListeningSession,
   recordSessionListened,
   getInsights,
@@ -14,6 +15,7 @@ import {
 } from "../controllers/wellbeingController.js";
 import protect from "../middlewares/authMiddleware.js";
 import validateRequest from "../middlewares/validateRequest.js";
+import { OPTIONAL } from "../utils/validation.js";
 
 const router = express.Router();
 
@@ -26,8 +28,8 @@ router.post(
   "/moods",
   [
     body("mood").isString().trim().notEmpty().isLength({ max: 40 }),
-    body("intensity").optional().isInt({ min: 1, max: 5 }),
-    body("context").optional().isString().isLength({ max: 200 }),
+    body("intensity").optional(OPTIONAL).isInt({ min: 1, max: 5 }),
+    body("context").optional(OPTIONAL).isString().isLength({ max: 200 }),
   ],
   validateRequest,
   logMood
@@ -35,7 +37,7 @@ router.post(
 
 router.get(
   "/moods",
-  [query("page").optional().isInt({ min: 1 }), query("limit").optional().isInt({ min: 1, max: 100 })],
+  [query("page").optional(OPTIONAL).isInt({ min: 1 }), query("limit").optional(OPTIONAL).isInt({ min: 1, max: 100 })],
   validateRequest,
   getMoodHistory
 );
@@ -44,18 +46,20 @@ router.get(
 router.get(
   "/insights",
   aiLimiter,
-  [query("periodDays").optional().isInt({ min: 7, max: 365 })],
+  [query("periodDays").optional(OPTIONAL).isInt({ min: 7, max: 365 })],
   validateRequest,
   getInsights
 );
+
+router.get("/feedback", getSongFeedback);
 
 router.post(
   "/feedback",
   [
     body("musicId").isMongoId(),
     body("signal").isIn(["liked", "skipped", "saved"]),
-    body("sessionId").optional().isMongoId(),
-    body("moodAtTime").optional().isString().trim(),
+    body("sessionId").optional(OPTIONAL).isMongoId(),
+    body("moodAtTime").optional(OPTIONAL).isString().trim(),
   ],
   validateRequest,
   submitSongFeedback

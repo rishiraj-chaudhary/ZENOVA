@@ -9,8 +9,21 @@ export const fetchMoodHistory = ({ page = 1, limit = 30 } = {}) =>
 export const fetchInsights = (periodDays = 30) =>
   apiClient.get("/wellbeing/insights", { params: { periodDays } });
 
+/**
+ * Optional fields are omitted rather than sent as null. The server tolerates
+ * null now, but a payload that says "sessionId: null" is claiming something it
+ * does not mean.
+ */
 export const submitFeedback = ({ musicId, signal, sessionId, moodAtTime }) =>
-  apiClient.post("/wellbeing/feedback", { musicId, signal, sessionId, moodAtTime });
+  apiClient.post("/wellbeing/feedback", {
+    musicId,
+    signal,
+    ...(sessionId ? { sessionId } : {}),
+    ...(moodAtTime ? { moodAtTime } : {}),
+  });
+
+/** The user's standing ratings, keyed by song id, so the buttons show state. */
+export const fetchFeedbackSignals = () => apiClient.get("/wellbeing/feedback");
 
 export const clearFeedback = (musicId) =>
   apiClient.delete(`/wellbeing/feedback/${musicId}`);

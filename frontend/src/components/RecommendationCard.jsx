@@ -6,7 +6,7 @@ import YouTubeFallback from "./YouTubeFallback.jsx";
  * RecommendationCard component that displays a music recommendation
  * with consistent Spotify ID extraction and formatting
  */
-function RecommendationCard({ index, song, moodColors, onAddToPlaylist, isCurrentlyPlaying, autoplayEnabled, onTrackEnded, onPlay, sessionId, moodAtTime }) {
+function RecommendationCard({ index, song, moodColors, onAddToPlaylist, isCurrentlyPlaying, autoplayEnabled, onTrackEnded, onPlay, sessionId, moodAtTime, feedbackSignal, onFeedbackChange }) {
   const extractSpotifyTrackId = (spotifyString) => {
     if (!spotifyString) return null;
     try {
@@ -138,6 +138,8 @@ function RecommendationCard({ index, song, moodColors, onAddToPlaylist, isCurren
             musicId={song.musicId}
             sessionId={sessionId}
             moodAtTime={moodAtTime}
+            initialSignal={feedbackSignal}
+            onChange={onFeedbackChange}
           />
         </div>
       </div>

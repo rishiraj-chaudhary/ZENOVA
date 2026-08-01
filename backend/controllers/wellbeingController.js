@@ -9,7 +9,11 @@ import {
   markSessionListened,
   startSession,
 } from "../services/outcomeService.js";
-import { recordFeedback, removeFeedback } from "../services/tasteService.js";
+import {
+  getFeedbackSignals,
+  recordFeedback,
+  removeFeedback,
+} from "../services/tasteService.js";
 import { checkAndAwardBadges } from "../services/badgeService.js";
 import { awardPoints } from "../services/pointsService.js";
 import asyncHandler from "../utils/asyncHandler.js";
@@ -80,6 +84,10 @@ export const submitSongFeedback = asyncHandler(async (req, res) => {
   });
 
   res.status(201).json(feedback);
+});
+
+export const getSongFeedback = asyncHandler(async (req, res) => {
+  res.json({ signals: await getFeedbackSignals(req.user._id) });
 });
 
 export const clearSongFeedback = asyncHandler(async (req, res) => {

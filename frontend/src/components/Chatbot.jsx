@@ -5,6 +5,7 @@ import * as wellbeingAPI from "../api/wellbeingAPI.js";
 import { colorsForMood } from "../constants/moodColors.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import useChatMessages from "../hooks/useChatMessages.js";
+import useSongFeedback from "../hooks/useSongFeedback.js";
 import useSpeechRecognition from "../hooks/useSpeechRecognition.js";
 import ChatComposer from "./chat/ChatComposer.jsx";
 import ChatHeader from "./chat/ChatHeader.jsx";
@@ -38,6 +39,8 @@ function Chatbot() {
     session,
     setSession,
   } = useChatMessages(userId);
+
+  const { signals: feedbackSignals, remember: rememberFeedback } = useSongFeedback();
 
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -244,6 +247,8 @@ function Chatbot() {
               <RecommendationPanel
                 recommendations={recommendations}
                 curated={curated}
+                feedbackSignals={feedbackSignals}
+                onFeedbackChange={rememberFeedback}
                 moodColors={colorsForMood(mood)}
                 mood={mood}
                 sessionId={sessionId}

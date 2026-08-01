@@ -20,6 +20,7 @@ import {
 import protect from "../middlewares/authMiddleware.js";
 import { trackAction } from "../middlewares/gamificationMiddleware.js";
 import validateRequest from "../middlewares/validateRequest.js";
+import { OPTIONAL } from "../utils/validation.js";
 
 const router = express.Router();
 
@@ -46,7 +47,7 @@ router.post(
       .trim()
       .notEmpty()
       .withMessage("A voice command is required"),
-    body("conversationHistory").optional().isArray({ max: 50 }),
+    body("conversationHistory").optional(OPTIONAL).isArray({ max: 50 }),
   ],
   validateRequest,
   trackAction("PLAYLIST_CREATED"),

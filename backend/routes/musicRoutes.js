@@ -10,6 +10,7 @@ import {
 } from "../controllers/musicController.js";
 import protect, { attachUserIfPresent } from "../middlewares/authMiddleware.js";
 import validateRequest from "../middlewares/validateRequest.js";
+import { OPTIONAL } from "../utils/validation.js";
 
 const router = express.Router();
 
@@ -20,7 +21,7 @@ router.post(
   [
     body("message").isString().trim().notEmpty().withMessage("A message is required"),
     body("conversationHistory")
-      .optional()
+      .optional(OPTIONAL)
       .isArray({ max: 50 })
       .withMessage("conversationHistory must be an array"),
   ],

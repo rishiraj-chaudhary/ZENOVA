@@ -3,10 +3,12 @@ import CollaboratorsList from "../components/CollaboratorsList.jsx";
 import InvitationsInbox from "../components/InvitationsInbox.jsx";
 import PlaylistInvitation from "../components/PlaylistInvitation.jsx";
 import PresenceIndicator from "../components/PresenceIndicator.jsx";
+import SongFeedback from "../components/SongFeedback.jsx";
 import SpotifyPlayer from "../components/SpotifyPlayer.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useSocket } from "../context/SocketContext.jsx";
 import usePlaylists from "../hooks/usePlaylists.js";
+import useSongFeedback from "../hooks/useSongFeedback.js";
 import useSpeechRecognition from "../hooks/useSpeechRecognition.js";
 import { extractSpotifyTrackId } from "../utils/spotify.js";
 
@@ -48,6 +50,9 @@ const Playlists = () => {
     removeSong,
     reorderSongs,
   } = usePlaylists();
+
+  // Rating belongs wherever a song is, not only in the chat panel.
+  const { signals: feedbackSignals, remember: rememberFeedback } = useSongFeedback();
 
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [expandedPlaylist, setExpandedPlaylist] = useState(null);
@@ -554,6 +559,16 @@ const Playlists = () => {
                                                                     className="h-8 w-full max-w-[200px] bg-white/10 rounded-md"
                                                                 ></audio>
                                                             )}
+                                                            {/* The like/skip controls only ever existed on chat
+                                                                recommendations, so songs you had actually kept
+                                                                could not be rated — the place you are most likely
+                                                                to have an opinion. */}
+                                                            <SongFeedback
+                                                                musicId={song.musicId}
+                                                                initialSignal={feedbackSignals[song.musicId] ?? null}
+                                                                onChange={rememberFeedback}
+                                                            />
+
                                                             <button
                                                                 onClick={() => handleDeleteSong(playlist._id, song.musicId)}
                                                                 disabled={deletingSongs?.[song._id || song.musicId]}
