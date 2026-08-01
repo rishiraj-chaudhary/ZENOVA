@@ -67,7 +67,7 @@ const Settings = () => {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 px-4 py-8 text-white sm:px-6">
+    <main className="min-h-viewport bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 px-4 py-8 text-white sm:px-6">
       <div className="mx-auto max-w-2xl space-y-6">
         <header>
           <h1 className="text-3xl font-bold">Settings</h1>

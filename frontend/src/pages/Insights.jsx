@@ -62,7 +62,7 @@ const Insights = () => {
   const efficacy = insights?.efficacy;
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 px-4 py-8 text-white sm:px-6">
+    <main className="min-h-viewport bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 px-4 py-8 text-white sm:px-6">
       <div className="mx-auto max-w-5xl">
         <header className="mb-8">
           <h1 className="text-3xl font-bold sm:text-4xl">

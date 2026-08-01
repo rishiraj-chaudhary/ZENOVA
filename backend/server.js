@@ -58,7 +58,37 @@ const socketManager = new SocketManager(io);
 const configureApp = () => {
   app.set("trust proxy", 1);
 
-  app.use(helmet({ crossOriginEmbedderPolicy: false }));
+  app.use(
+    helmet({
+      crossOriginEmbedderPolicy: false,
+      /**
+       * Helmet's default policy allows nothing third-party, which would block
+       * the Spotify embed, its iFrame API script (the thing that reports when a
+       * track ends) and the iTunes preview audio — every playback path in the
+       * app. Only the hosts actually used are allowed.
+       */
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          // Spotify's embed API is loaded from their origin at runtime.
+          scriptSrc: ["'self'", "https://open.spotify.com", "https://sdk.scdn.co"],
+          // Tailwind is compiled at build time now; the inline allowance covers
+          // small style blocks React renders alongside components.
+          styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://cdn-uicons.flaticon.com"],
+          fontSrc: ["'self'", "data:", "https://cdnjs.cloudflare.com", "https://cdn-uicons.flaticon.com"],
+          // Album art comes from Spotify's CDN; data: covers generated QR codes.
+          imgSrc: ["'self'", "data:", "https:"],
+          // 30-second previews are served by Apple.
+          mediaSrc: ["'self'", "https://audio-ssl.itunes.apple.com", "https://p.scdn.co"],
+          connectSrc: ["'self'", "https://api.spotify.com", "https://open.spotify.com", "wss:", "ws:"],
+          frameSrc: ["https://open.spotify.com", "https://www.youtube.com"],
+          objectSrc: ["'none'"],
+          baseUri: ["'self'"],
+          frameAncestors: ["'self'", "https://open.spotify.com"],
+        },
+      },
+    })
+  );
   app.use(cors(corsOptions));
   app.use(compression());
   app.use(express.json({ limit: "1mb" }));

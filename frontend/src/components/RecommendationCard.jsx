@@ -89,6 +89,7 @@ function RecommendationCard({ index, song, moodColors, onAddToPlaylist, isCurren
             title={song.title}
             artist={song.artist}
             albumArt={song.albumArt}
+            previewUrl={song.previewUrl}
             onTrackEnded={onTrackEnded}
             autoplayEnabled={autoplayEnabled}
             isCurrentlyPlaying={isCurrentlyPlaying}
@@ -100,7 +101,8 @@ function RecommendationCard({ index, song, moodColors, onAddToPlaylist, isCurren
             albumArt={song.albumArt}
             watchUrl={song.audioUrl}
             previewUrl={song.previewUrl}
-            onPreviewEnded={onTrackEnded}
+            autoPlay={isCurrentlyPlaying}
+            onPreviewEnded={autoplayEnabled ? onTrackEnded : undefined}
           />
         )}
       </div>

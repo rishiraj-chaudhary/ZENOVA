@@ -54,7 +54,7 @@ const Home = () => {
   }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white px-6 relative overflow-hidden font-sans">
+    <div className="flex flex-col items-center justify-center min-h-viewport bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white px-6 relative overflow-hidden font-sans">
       {/* Animated background elements - More diffused and artistic */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className={`absolute top-1/4 left-1/4 w-72 h-72 rounded-full bg-gradient-to-r from-purple-500 to-fuchsia-600 blur-3xl opacity-8 animate-pulse-slow ${isLoaded ? '' : 'opacity-0'}`} style={{transitionDelay: '100ms'}}></div>

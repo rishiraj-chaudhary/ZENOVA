@@ -211,7 +211,7 @@ function Chatbot() {
     );
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white">
+    <div className="flex h-viewport flex-col overflow-hidden bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white">
       <ChatHeader mood={mood} />
 
       <div className="flex flex-grow flex-col overflow-hidden lg:flex-row">

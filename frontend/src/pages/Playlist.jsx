@@ -180,7 +180,7 @@ const Playlists = () => {
     setExpandedPlaylist((current) => (current === playlistId ? null : playlistId));
 
    return (
-    <div className="sticky top-0 z-40 flex flex-col h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white overflow-hidden font-sans relative">
+    <div className="flex flex-col h-viewport bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white overflow-hidden font-sans relative">
         {/* Animated Background */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
             <div className="absolute -top-36 -right-36 w-72 h-72 bg-gradient-to-r from-purple-500 to-fuchsia-600 rounded-full mix-blend-multiply filter blur-3xl opacity-7 animate-pulse-slow"></div>
@@ -376,7 +376,7 @@ const Playlists = () => {
         )}
 
         {/* Playlists Content */}
-        <div className="flex-grow overflow-y-auto py-4 scrollbar-thin">
+        <div className="scroll-area flex-grow overflow-y-auto py-4 scrollbar-thin">
             <div className="md:mx-6 md:max-w-6xl md:mx-auto px-4 md:px-0">
                 <InvitationsInbox onAccepted={refresh} />
             </div>

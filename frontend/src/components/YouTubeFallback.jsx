@@ -20,6 +20,7 @@ const YouTubeFallback = ({
   reason,
   watchUrl,
   previewUrl,
+  autoPlay,
   onPreviewEnded,
 }) => {
   const audioRef = useRef(null);
@@ -39,6 +40,18 @@ const YouTubeFallback = ({
     const audio = audioRef.current;
     return () => audio?.pause();
   }, []);
+
+  // Autoplay handed this song the turn. Allowed without a fresh gesture because
+  // the user pressed play earlier on this page; if the browser refuses anyway,
+  // the button is still there.
+  useEffect(() => {
+    if (!autoPlay || !previewUrl) return;
+
+    audioRef.current?.play().then(
+      () => setPlaying(true),
+      () => setPlaying(false)
+    );
+  }, [autoPlay, previewUrl]);
 
   const togglePreview = () => {
     const audio = audioRef.current;

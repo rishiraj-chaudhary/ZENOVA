@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { logMood } from "../api/wellbeingAPI.js";
+import Modal from "./Modal.jsx";
 import MoodScale, { MOOD_OPTIONS } from "./MoodScale.jsx";
 
 const STORAGE_KEY = "lastCheckInDate";
@@ -8,13 +9,17 @@ const today = () => new Date().toISOString().slice(0, 10);
 export const hasCheckedInToday = () => localStorage.getItem(STORAGE_KEY) === today();
 
 /**
- * The 5-second daily habit loop.
+ * The 5-second daily habit loop, asked once a day as a dialog.
  *
  * Mood was previously only inferred from chat messages, so a user who did not
  * type anything left no trace and the Patterns page stayed empty. One tap a day
  * is what makes the longitudinal view worth opening.
+ *
+ * It sits in a modal rather than inline above the chat: inline it pushed the
+ * whole conversation down the page on every visit, and it was easy to scroll
+ * past without answering — which is the one thing this is for.
  */
-const DailyCheckIn = ({ onDone }) => {
+const DailyCheckIn = ({ open = true, onDone }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -37,28 +42,34 @@ const DailyCheckIn = ({ onDone }) => {
   };
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-white/5 p-6 text-center">
-      <h2 className="text-lg font-semibold text-white">How are you today?</h2>
-      <p className="mt-1 text-sm text-gray-400">One tap. It builds your Patterns view.</p>
-
-      <div className="mt-5">
-        <MoodScale value={null} onChange={submit} name="daily" disabled={saving} />
-      </div>
-
-      {error && (
-        <p role="alert" className="mt-3 text-sm text-red-300">
-          {error}
+    <Modal open={open} onClose={onDone} labelledBy="daily-check-in-title">
+      <section className="p-6 text-center sm:p-8">
+        <h2 id="daily-check-in-title" className="text-xl font-semibold text-white">
+          How are you today?
+        </h2>
+        <p className="mt-1.5 text-sm text-gray-400">
+          One tap. It builds your Patterns view.
         </p>
-      )}
 
-      <button
-        type="button"
-        onClick={onDone}
-        className="mt-4 text-xs text-gray-500 underline-offset-2 hover:text-gray-300 hover:underline"
-      >
-        Not now
-      </button>
-    </section>
+        <div className="mt-6">
+          <MoodScale value={null} onChange={submit} name="daily" disabled={saving} />
+        </div>
+
+        {error && (
+          <p role="alert" className="mt-4 text-sm text-red-300">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={onDone}
+          className="mt-6 rounded-lg px-3 py-1.5 text-xs text-gray-500 underline-offset-2 transition-colors hover:text-gray-300 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+        >
+          Not now
+        </button>
+      </section>
+    </Modal>
   );
 };
 

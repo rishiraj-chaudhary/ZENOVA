@@ -17,15 +17,13 @@ const Profile = () => {
   );
 
   return (
-    <div className="min-h-screen">
-      {showCheckIn && (
-        <div className="mx-auto max-w-2xl px-4 pt-6">
-          <DailyCheckIn onDone={() => setShowCheckIn(false)} />
-        </div>
-      )}
-
+    <>
+      {/* A dialog over the chat rather than a card above it: inline, it pushed
+          the conversation down the page every visit and could be scrolled past
+          without answering. */}
+      <DailyCheckIn open={showCheckIn} onDone={() => setShowCheckIn(false)} />
       <Chatbot />
-    </div>
+    </>
   );
 };
 

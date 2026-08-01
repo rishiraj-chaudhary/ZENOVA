@@ -58,7 +58,7 @@ const InviteAccept = () => {
     }
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-[#181818] text-white p-4">
+        <div className="flex flex-col items-center justify-center min-h-viewport bg-[#181818] text-white p-4">
             <div className="bg-[#1e1e1e] p-8 rounded-lg shadow-lg max-w-md w-full">
                 <h2 className="text-2xl font-bold text-center mb-6">Playlist Invitation</h2>
                 

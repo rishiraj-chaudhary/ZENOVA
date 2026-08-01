@@ -76,7 +76,7 @@ const SpotifyCallback = () => {
   }, [searchParams, handleCallback, adoptSession, navigate]);
 
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-[#181818]">
+    <div className="flex flex-col items-center justify-center min-h-viewport bg-[#181818]">
       <div className="bg-[#252525] p-8 rounded-lg shadow-lg max-w-md w-full">
         <h2 className="text-2xl font-bold text-white mb-4">Spotify</h2>
         <p className="text-gray-300">{status}</p>

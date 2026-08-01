@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * Tailwind is compiled at build time rather than pulled from the CDN browser
+ * build, which shipped a compiler to every visitor and styled the page only
+ * after first paint — the flash of unstyled content and the layout jump that
+ * followed it.
+ */
+
+:root {
+  /* Matches the fixed navbar's h-16. Referenced by the viewport utilities so
+     there is one number to change. */
+  --nav-h: 4rem;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  /* Full-height pages manage their own scrolling; the document itself should
+     never also scroll, which is what produced two scrollbars on every page. */
+  overflow-x: hidden;
+}
+
+/* iOS Safari momentum scrolling inside the app's own scroll containers. */
+.scroll-area {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

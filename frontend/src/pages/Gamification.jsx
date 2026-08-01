@@ -40,13 +40,13 @@ const Gamification = () => {
 
     if(loading){
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 flex items-center justify-center">
+            <div className="min-h-viewport bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 flex items-center justify-center">
                 <div className="text-white text-xl">Loading your achievements...</div>
             </div>
         );
     }
     return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white p-6">
+    <div className="min-h-viewport bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white p-6">
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full mix-blend-multiply filter blur-xl opacity-10 animate-pulse"></div>

@@ -31,7 +31,7 @@ const Settings = lazy(() => import("./pages/Settings.jsx"));
 const SpotifyCallback = lazy(() => import("./components/SpotifyCallback.jsx"));
 
 const FullPageMessage = ({ children }) => (
-  <div className="flex min-h-screen items-center justify-center text-gray-300">
+  <div className="flex min-h-viewport items-center justify-center text-gray-300">
     {children}
   </div>
 );
@@ -60,7 +60,11 @@ const AppRoutes = () => {
           chat and no mood is recorded before consent is given. */}
       {needsOnboarding && <Onboarding onComplete={completeOnboarding} />}
 
-      <div className="pt-16">
+      {/* pt-nav clears the fixed navbar. Pages size themselves against
+          h-viewport / min-h-viewport, which subtract the same amount — the two
+          used to disagree, so every page was 4rem taller than the window and
+          the document scrolled behind its own scrolling panes. */}
+      <div className="pt-nav">
         <ErrorBoundary resetKey={location.pathname} label="this page">
           <Suspense fallback={<FullPageMessage>Loading…</FullPageMessage>}>
             <Routes>
