@@ -51,6 +51,42 @@ export const AuthProvider = ({ children }) => {
     return profile;
   }, []);
 
+  /**
+   * Adopts a session established by a flow that authenticated elsewhere —
+   * today, signing in with Spotify, where the server does the find-or-create
+   * and hands back the same payload the password login returns.
+   */
+  const adoptSession = useCallback(({ user: authenticatedUser, refreshToken }) => {
+    const { token, ...profile } = authenticatedUser;
+
+    storeAuth({ token, userId: profile._id, refreshToken });
+    setUser(profile);
+    return profile;
+  }, []);
+
+  /**
+   * Mirrors a consent change into the session the rest of the app reads.
+   *
+   * Settings wrote consent to the server and stopped there, so the daily
+   * check-in card — the whole point of turning it on — stayed hidden until a
+   * full page reload.
+   */
+  const applyConsent = useCallback((moodTracking) => {
+    setUser((current) =>
+      current
+        ? {
+            ...current,
+            consent: {
+              moodTracking,
+              grantedAt: moodTracking
+                ? current.consent?.grantedAt ?? new Date().toISOString()
+                : null,
+            },
+          }
+        : current
+    );
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await authAPI.logout();
@@ -75,10 +111,12 @@ export const AuthProvider = ({ children }) => {
       // loaded and has no onboardedAt should be prompted.
       needsOnboarding: Boolean(user) && !user.onboardedAt,
       login,
+      adoptSession,
+      applyConsent,
       logout,
       completeOnboarding,
     }),
-    [user, loading, login, logout, completeOnboarding]
+    [user, loading, login, adoptSession, applyConsent, logout, completeOnboarding]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

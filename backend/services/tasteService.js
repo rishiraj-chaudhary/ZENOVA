@@ -27,8 +27,11 @@ export const recordFeedback = async ({
   );
 };
 
-export const removeFeedback = ({ userId, musicId }) =>
-  ListeningFeedback.deleteOne({ userId, musicId });
+/** Reports whether anything was actually removed, so the caller can be honest. */
+export const removeFeedback = async ({ userId, musicId }) => {
+  const { deletedCount } = await ListeningFeedback.deleteOne({ userId, musicId });
+  return deletedCount > 0;
+};
 
 const topGenres = (rows) =>
   rows

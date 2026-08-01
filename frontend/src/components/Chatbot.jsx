@@ -28,13 +28,23 @@ function Chatbot() {
   const { user } = useAuth();
   const userId = user?._id;
 
-  const { messages, appendMessage, recommendations, setRecommendations, mood, setMood } =
-    useChatMessages(userId);
+  const {
+    messages,
+    appendMessage,
+    recommendations,
+    setRecommendations,
+    mood,
+    setMood,
+    session,
+    setSession,
+  } = useChatMessages(userId);
 
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [support, setSupport] = useState(null);
-  const [sessionId, setSessionId] = useState(null);
+  // Lives in useChatMessages so it survives a refresh alongside the songs it
+  // belongs to; a reload used to keep the songs and lose the measurement.
+  const { sessionId, curated } = session;
   const [checkInPhase, setCheckInPhase] = useState(null);
   // The after-rating is only meaningful once something was actually heard.
   const [hasListened, setHasListened] = useState(false);
@@ -88,7 +98,12 @@ function Chatbot() {
 
       if (result.recommendations?.length) {
         setRecommendations(result.recommendations);
-        setSessionId(result.sessionId ?? null);
+        setSession({
+          sessionId: result.sessionId ?? null,
+          // The server says when it fell back to the fixed catalogue. Ignoring
+          // it passed the same eight songs off as a personalised result.
+          curated: Boolean(result.curated),
+        });
         setCheckInPhase(result.sessionId ? "before" : null);
         setHasListened(false);
       }
@@ -186,7 +201,7 @@ function Chatbot() {
 
   const completeAfterRating = () => {
     setCheckInPhase(null);
-    setSessionId(null);
+    setSession({ sessionId: null, curated: false });
     setHasListened(false);
   };
 
@@ -228,6 +243,7 @@ function Chatbot() {
             <ErrorBoundary label="the recommendations">
               <RecommendationPanel
                 recommendations={recommendations}
+                curated={curated}
                 moodColors={colorsForMood(mood)}
                 mood={mood}
                 sessionId={sessionId}

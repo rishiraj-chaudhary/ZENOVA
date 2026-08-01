@@ -26,26 +26,36 @@ const VAGUE_QUANTITIES = {
 const clamp = (count) =>
   Math.min(Math.max(count, MIN_SONG_COUNT), MAX_SONG_COUNT);
 
+/** What the user might call a song, however they phrase the rest. */
+const NOUNS = "songs?|tracks?|recommendations?|tunes?|pieces?";
+
 /**
- * Infers how many songs the user asked for: "give me 3 tracks", "a few songs",
- * "seven songs". Falls back to DEFAULT_SONG_COUNT when nothing is stated.
+ * Up to three words may sit between the number and the noun, so "3 calming
+ * songs" and "four sad piano tracks" are understood. Requiring them to be
+ * adjacent meant any description of the music silently discarded the count and
+ * the user got the default five instead of the three they asked for.
+ */
+const withGap = (quantity) =>
+  new RegExp(`\\b${quantity}(?:\\s+[a-z-]+){0,3}\\s+(?:${NOUNS})\\b`);
+
+/**
+ * Infers how many songs the user asked for: "give me 3 calming tracks", "a few
+ * songs", "seven songs". Falls back to DEFAULT_SONG_COUNT when nothing is said.
  */
 const parseRequestedSongCount = (userInput = "") => {
   const normalized = userInput.toLowerCase();
 
-  const digitMatch = normalized.match(
-    /(\d+)\s*(?:songs?|tracks?|recommendations?)/
-  );
+  const digitMatch = normalized.match(withGap("(\\d+)"));
   if (digitMatch) return clamp(Number.parseInt(digitMatch[1], 10));
 
   for (const [word, count] of Object.entries(WRITTEN_NUMBERS)) {
-    if (new RegExp(`\\b${word}\\s+(?:songs?|tracks?)`).test(normalized)) {
-      return count;
-    }
+    if (withGap(word).test(normalized)) return count;
   }
 
+  // Word-bounded. A bare substring test read "Germany" as "many" and served
+  // eight songs to someone who had only mentioned a country.
   for (const [word, count] of Object.entries(VAGUE_QUANTITIES)) {
-    if (normalized.includes(word)) return count;
+    if (new RegExp(`\\b${word}\\b`).test(normalized)) return count;
   }
 
   return DEFAULT_SONG_COUNT;

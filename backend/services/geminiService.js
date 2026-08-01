@@ -103,7 +103,12 @@ const generate = async (operation, prompt, responseSchema, modelName) => {
         recordLlmCall({ operation, durationMs, outcome: "error" });
         lastError = error;
 
-        if (!isRetryable(error)) throw error;
+        // A non-retryable error means *this model* cannot serve the request —
+        // it was retired, the name is wrong, the schema is rejected. Aborting
+        // the whole chain made the fallback list decorative: when
+        // gemini-2.0-flash was retired its 404 took the feature down rather
+        // than moving to the next model. Break to the next candidate instead.
+        if (!isRetryable(error)) break;
 
         if (attempt < RETRIES_PER_MODEL) {
           await sleep(BASE_BACKOFF_MS * 2 ** attempt);

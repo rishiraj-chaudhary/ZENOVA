@@ -18,9 +18,34 @@ const userSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
-    // Excluded by default so no query can leak the hash by accident. The auth
-    // service opts in explicitly with .select("+password").
-    password: { type: String, required: true, select: false },
+    /**
+     * Excluded by default so no query can leak the hash by accident. The auth
+     * service opts in explicitly with .select("+password").
+     *
+     * Required only for accounts that sign in with one: a Spotify account has
+     * no ZENOVA password, and inventing a random one would leave a credential
+     * nobody can use and nobody can rotate.
+     */
+    password: {
+      type: String,
+      select: false,
+      required() {
+        return !this.spotifyId;
+      },
+    },
+
+    /**
+     * The Spotify account this user signs in with, when they do.
+     *
+     * Sparse, so the unique constraint applies only to the accounts that have
+     * one — password accounts all leave it unset and must not collide.
+     */
+    spotifyId: {
+      type: String,
+      default: undefined,
+      unique: true,
+      sparse: true,
+    },
 
     preferences: { type: [String], default: [] },
     favoriteTracks: [{ type: mongoose.Schema.Types.ObjectId, ref: "MusicResource" }],

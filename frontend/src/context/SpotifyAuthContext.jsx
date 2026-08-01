@@ -80,23 +80,37 @@ export const SpotifyAuthProvider = ({ children }) => {
     }
   }, [session, refreshAccessToken]);
 
-  const login = useCallback(async () => {
+  /**
+   * Sends the browser to Spotify.
+   *
+   * "connect" adds playback to an existing ZENOVA account; "login" signs the
+   * person in with Spotify, creating a ZENOVA account the first time. The
+   * button on the signed-out login page used to start the "connect" flow, which
+   * stored tokens and then dropped the user back on /login with no account.
+   */
+  const login = useCallback(async (intent = "connect") => {
     try {
-      const { authUrl } = await musicAPI.fetchSpotifyAuthUrl();
+      const { authUrl } = await musicAPI.fetchSpotifyAuthUrl(intent);
       window.location.href = authUrl;
     } catch (error) {
       console.error("Failed to start Spotify login:", error.message);
     }
   }, []);
 
+  /**
+   * Completes the exchange and returns whatever the server decided the flow
+   * was: `user`/`refreshToken` when it signed someone in, `linked` when it
+   * attached Spotify to the current account, neither for playback-only.
+   */
   const handleCallback = useCallback(
     async (code, state) => {
       try {
-        persist(toSession(await musicAPI.exchangeSpotifyCode({ code, state })));
-        return true;
+        const result = await musicAPI.exchangeSpotifyCode({ code, state });
+        persist(toSession(result));
+        return { ok: true, ...result };
       } catch (error) {
         console.error("Spotify callback failed:", error.message);
-        return false;
+        return { ok: false, message: error.message };
       }
     },
     [persist]

@@ -1,4 +1,9 @@
-import { DAILY_POINT_CAPS, LEVELS, POINTS } from "../config/gamification.js";
+import {
+  DAILY_POINT_CAPS,
+  LEVELS,
+  POINTS,
+  getLevelProgress,
+} from "../config/gamification.js";
 import Gamification from "../models/Gamification.js";
 import PointAward from "../models/PointAward.js";
 import { dayKey, daysBetweenKeys } from "../utils/dayKey.js";
@@ -114,6 +119,10 @@ const applyAwardEffects = async (userId, action, points, stats, socketManager, a
     totalPoints: stats.totalPoints,
     level,
     leveledUp,
+    // Without this the client kept the progress it already had and applied the
+    // new total to it, so the Achievements bar showed the new points against
+    // the old level's thresholds until the page was reloaded.
+    progress: getLevelProgress(stats.totalPoints),
   });
 
   // Undelivered awards stay flagged and are replayed on the next connection.

@@ -1,4 +1,9 @@
 import ListeningFeedback from "../models/ListeningFeedback.js";
+import Leaderboard from "../models/Leaderboard.js";
+import PlaylistInvitation from "../models/PlaylistInvitation.js";
+import PointAward from "../models/PointAward.js";
+import RefreshToken from "../models/RefreshToken.js";
+import TherapySession from "../models/TherapySession.js";
 import MoodEntry from "../models/MoodEntry.js";
 import Playlist from "../models/Playlist.js";
 import Recommendation from "../models/Recommendation.js";
@@ -89,18 +94,31 @@ export const exportUserData = async (userId) => {
 const eraseWellbeing = async (userId, session) => {
   const options = session ? { session } : {};
 
-  const [moods, feedback, outcomes, recommendations] = await Promise.all([
+  const [moods, feedback, outcomes, recommendations, chats] = await Promise.all([
     MoodEntry.deleteMany({ userId }, options),
     ListeningFeedback.deleteMany({ userId }, options),
     SessionOutcome.deleteMany({ userId }, options),
     Recommendation.deleteMany({ userId }, options),
+    // The chat log records what the user said to get each recommendation, which
+    // is the same disclosure as the mood history it produced.
+    TherapySession.deleteMany({ userId }, options),
   ]);
+
+  // Counters derived from the records above are the same data in a different
+  // shape — "you have checked in 40 times" reconstructs a history the user just
+  // asked to erase. The points those actions earned are left alone.
+  await Gamification.updateOne(
+    { userId },
+    { $set: { checkInDays: 0, measuredSessions: 0, therapySessions: 0 } },
+    options
+  );
 
   return {
     moodEntries: moods.deletedCount,
     songFeedback: feedback.deletedCount,
     sessionOutcomes: outcomes.deletedCount,
     recommendationSessions: recommendations.deletedCount,
+    chatSessions: chats.deletedCount,
   };
 };
 
@@ -129,6 +147,22 @@ export const deleteAccount = (userId) =>
       ),
       Gamification.deleteOne({ userId }, options),
       UserBadge.deleteMany({ userId }, options),
+
+      // Every other collection keyed to this person. "Removes your account and
+      // all history" left the award ledger, live refresh tokens, invitations
+      // naming them, and their rows in cached leaderboards — the last of which
+      // would keep showing a deleted user's name on a public board.
+      PointAward.deleteMany({ userId }, options),
+      RefreshToken.deleteMany({ userId }, options),
+      PlaylistInvitation.deleteMany(
+        { $or: [{ invitedUserId: userId }, { invitedByUserId: userId }] },
+        options
+      ),
+      Leaderboard.updateMany(
+        { "entries.userId": userId },
+        { $pull: { entries: { userId } } },
+        options
+      ),
     ]);
 
     const deleted = await User.findByIdAndDelete(userId, options);

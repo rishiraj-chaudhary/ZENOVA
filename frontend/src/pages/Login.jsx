@@ -98,7 +98,7 @@ const Login = () => {
 
           <button
             type="button"
-            onClick={loginWithSpotify}
+            onClick={() => loginWithSpotify("login")}
             className="w-full p-3 bg-[#1DB954] hover:bg-[#1ed760] text-white rounded-full font-semibold transition-all duration-300"
           >
             Login with Spotify

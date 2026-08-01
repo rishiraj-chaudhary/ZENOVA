@@ -121,12 +121,16 @@ export const getUserBadges = async (userId) => {
 /** Idempotently seeds the badge catalogue defined in config/gamification.js. */
 export const initializeDefaultBadges = async () => {
   try {
+    // $set, not $setOnInsert: the catalogue in config is the source of truth,
+    // and seeding it write-once meant every later edit — a reworded
+    // description, a corrected requirement, a renamed level — was silently
+    // ignored on any database that had already been seeded.
     await Badge.bulkWrite(
       BADGES.map((badge) => ({
         updateOne: {
           filter: { name: badge.name },
           update: {
-            $setOnInsert: {
+            $set: {
               ...badge,
               icon: badge.icon ?? "/icons/badge-default.svg",
               pointsReward: badge.pointsReward ?? 0,
@@ -137,6 +141,18 @@ export const initializeDefaultBadges = async () => {
         },
       }))
     );
+
+    // A badge dropped from the catalogue stays in the database — users who
+    // earned it keep it — but must stop being offered, or it sits in the list
+    // permanently unearnable.
+    const retired = await Badge.updateMany(
+      { name: { $nin: BADGES.map((badge) => badge.name) }, isActive: true },
+      { $set: { isActive: false } }
+    );
+
+    if (retired.modifiedCount > 0) {
+      logger.info("retired badges deactivated", { count: retired.modifiedCount });
+    }
   } catch (error) {
     logger.error("Failed to initialize default badges:", error.message);
   }

@@ -132,7 +132,7 @@ export const BADGES = [
   },
   {
     name: "Self Aware",
-    description: "Logged 25 mood check-ins",
+    description: "Checked in on 25 different days",
     requirement: { type: "check_in_days", value: 25 },
     category: "therapy",
     rarity: "rare",

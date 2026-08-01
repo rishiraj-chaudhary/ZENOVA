@@ -8,7 +8,7 @@ import {
   handleSpotifyCallback,
   refreshSpotifyToken,
 } from "../controllers/musicController.js";
-import protect from "../middlewares/authMiddleware.js";
+import protect, { attachUserIfPresent } from "../middlewares/authMiddleware.js";
 import validateRequest from "../middlewares/validateRequest.js";
 
 const router = express.Router();
@@ -35,8 +35,11 @@ router.get(
   getSpotifyEmbed
 );
 
-router.get("/spotify/auth", getSpotifyAuthUrl);
-router.get("/spotify/callback", handleSpotifyCallback);
+// Optional auth on both: signed out, the callback signs the person in with
+// their Spotify account; signed in, it attaches Spotify to the account they
+// already have. Requiring a token would make the first case impossible.
+router.get("/spotify/auth", attachUserIfPresent, getSpotifyAuthUrl);
+router.get("/spotify/callback", attachUserIfPresent, handleSpotifyCallback);
 router.post("/spotify/refresh", refreshSpotifyToken);
 
 export default router;

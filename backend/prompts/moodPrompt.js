@@ -10,11 +10,16 @@ const formatRecentMoods = (moodHistory) =>
     .map((entry) => entry.mood)
     .join(", ") || "No previous data";
 
-const formatConversation = (conversationHistory, limit) =>
-  conversationHistory
-    .slice(-limit)
-    .map((message) => `${message.sender}: ${message.text}`)
-    .join("\n") || "No previous conversation";
+// Client-supplied, so it carries the same boundary as the latest message.
+const formatConversation = (conversationHistory, limit) => {
+  const recent = conversationHistory.slice(-limit);
+  if (recent.length === 0) return "No previous conversation";
+
+  return wrapUntrusted(
+    recent.map((message) => `${message.sender}: ${message.text}`).join("\n"),
+    { label: "conversation history" }
+  );
+};
 
 /**
  * Single source of truth for mood detection. Previously duplicated verbatim in

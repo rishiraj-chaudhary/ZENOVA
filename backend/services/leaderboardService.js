@@ -177,7 +177,17 @@ export const getLeaderboard = async (requestedType = "alltime") => {
   const period = currentPeriod(type);
 
   const leaderboard = await Leaderboard.findOne({ type, period }).lean();
-  if (leaderboard) return leaderboard.entries;
+
+  if (leaderboard) {
+    // Served immediately, but a stale board triggers a rebuild for the next
+    // reader. Refreshes were only ever scheduled when points were awarded, and
+    // that path is rate-limited, so a board could stay stale indefinitely once
+    // the system went quiet — a user's most recent points simply never showed.
+    const age = Date.now() - new Date(leaderboard.updatedAt ?? 0).getTime();
+    if (age > REBUILD_INTERVAL_MS) scheduleLeaderboardRefresh(type, period);
+
+    return leaderboard.entries;
+  }
 
   // First read of a new period: build on demand rather than return empty.
   return updateLeaderboard(type, period);

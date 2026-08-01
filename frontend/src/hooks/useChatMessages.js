@@ -39,11 +39,21 @@ const useChatMessages = (userId) => {
   const [recommendations, setRecommendations] = useState([]);
   const [mood, setMood] = useState(null);
 
+  /**
+   * The open measurement session, kept with the songs it belongs to.
+   *
+   * Recommendations survived a refresh but the session id did not, so the songs
+   * came back and the before/after check-in did not — silently dropping the one
+   * measurement the effect ledger is built from, on every reload.
+   */
+  const [session, setSession] = useState({ sessionId: null, curated: false });
+
   useEffect(() => {
     if (!userId) {
       setMessages([]);
       setRecommendations([]);
       setMood(null);
+      setSession({ sessionId: null, curated: false });
       return;
     }
 
@@ -51,6 +61,9 @@ const useChatMessages = (userId) => {
     setMessages(saved.length ? saved : [{ text: WELCOME_TEXT, sender: "assistant" }]);
     setRecommendations(readJson(keyFor(userId, "recommendations"), []));
     setMood(sessionStorage.getItem(keyFor(userId, "mood")));
+    setSession(
+      readJson(keyFor(userId, "session"), { sessionId: null, curated: false })
+    );
   }, [userId]);
 
   useEffect(() => {
@@ -64,6 +77,11 @@ const useChatMessages = (userId) => {
     if (mood) sessionStorage.setItem(keyFor(userId, "mood"), mood);
   }, [recommendations, mood, userId]);
 
+  useEffect(() => {
+    if (!userId) return;
+    writeJson(keyFor(userId, "session"), session);
+  }, [session, userId]);
+
   const appendMessage = useCallback(
     (message) => setMessages((current) => [...current, message]),
     []
@@ -76,6 +94,8 @@ const useChatMessages = (userId) => {
     setRecommendations,
     mood,
     setMood,
+    session,
+    setSession,
   };
 };
 

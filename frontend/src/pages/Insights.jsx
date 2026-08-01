@@ -14,6 +14,14 @@ const TREND_STYLES = {
   improving: { icon: "fa-arrow-trend-up", color: "text-emerald-400", label: "Trending up" },
   declining: { icon: "fa-arrow-trend-down", color: "text-amber-400", label: "Trending down" },
   steady: { icon: "fa-arrows-left-right", color: "text-sky-400", label: "Holding steady" },
+  // The server says "unknown" when it has too few entries to compare halves.
+  // Falling back to `steady` asserted stability the server had declined to
+  // claim — the one thing a wellbeing dashboard must not invent.
+  unknown: {
+    icon: "fa-circle-question",
+    color: "text-gray-400",
+    label: "Not enough check-ins yet",
+  },
 };
 
 const StatCard = ({ icon, label, value, hint }) => (
@@ -50,7 +58,7 @@ const Insights = () => {
     load();
   }, [load]);
 
-  const trend = TREND_STYLES[insights?.trend] ?? TREND_STYLES.steady;
+  const trend = TREND_STYLES[insights?.trend] ?? TREND_STYLES.unknown;
   const efficacy = insights?.efficacy;
 
   return (

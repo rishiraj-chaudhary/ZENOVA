@@ -5,6 +5,7 @@ import SessionCheckIn from "../SessionCheckIn.jsx";
 
 const RecommendationPanel = ({
   recommendations,
+  curated,
   moodColors,
   mood,
   sessionId,
@@ -22,9 +23,16 @@ const RecommendationPanel = ({
   onAfterRated,
 }) => (
   <aside className="flex h-full flex-col border-l border-white/10 bg-white/5">
+    {curated && (
+      <p className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
+        Personalised picks aren&apos;t available right now, so these are general
+        suggestions rather than a response to what you said.
+      </p>
+    )}
+
     <div className="flex items-center justify-between border-b border-white/10 p-4">
       <h2 className="font-light text-white">
-        Recommendations
+        {curated ? "General suggestions" : "Recommendations"}
         <span className="ml-2 text-xs text-gray-400">{recommendations.length}</span>
       </h2>
 

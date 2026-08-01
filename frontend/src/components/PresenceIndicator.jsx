@@ -5,6 +5,7 @@ import useSocketEvents from "../hooks/useSocketEvents.js";
 const PresenceIndicator = ({ playlistId }) => {
     const { joinPlaylist } = useSocket();
     const [activeUsers, setActiveUsers] = useState([]);
+    const [denied, setDenied] = useState(false);
 
     // The server sends the full roster with join/leave events, so it is the
     // authoritative list; collaborator events only adjust it optimistically.
@@ -14,31 +15,43 @@ const PresenceIndicator = ({ playlistId }) => {
         user_joined: replaceRoster,
         user_left: replaceRoster,
 
-        collaborator_added: ({ collaborator }) => {
-            if (!collaborator?.userId) return;
-
-            setActiveUsers((current) =>
-                current.some((entry) => entry.userId === collaborator.userId)
-                    ? current
-                    : [...current, collaborator]
-            );
-            joinPlaylist(playlistId);
-        },
+        // Being added as a collaborator is not the same as being in the room.
+        // Inserting them here showed people under "Who's Listening" who had
+        // never opened the playlist, until the next real roster event corrected
+        // it. Re-joining is enough: the server answers with the true roster.
+        collaborator_added: () => joinPlaylist(playlistId),
 
         collaborator_removed: ({ removedCollaborator }) => {
             if (!removedCollaborator?.userId) return;
 
+            // Removal is immediate — the server has already evicted their
+            // sockets — so dropping them locally avoids showing a ghost.
             setActiveUsers((current) =>
                 current.filter((entry) => entry.userId !== removedCollaborator.userId)
             );
             joinPlaylist(playlistId);
         },
+
+        // The server refuses rooms the user is not a member of. Nothing
+        // listened for it, so a denied join looked identical to an empty room.
+        join_denied: (data) => {
+            if (data.playlistId !== playlistId) return;
+            setDenied(true);
+        },
     });
+
+    if (denied) {
+        return (
+            <div className="relative my-10 p-6 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-100 max-w-3xl w-full mx-auto">
+                You no longer have access to this playlist&apos;s live session.
+            </div>
+        );
+    }
 
     return (
         <div className="relative my-10 p-8 rounded-2xl bg-gradient-to-br from-[#1DB954]/20 to-[#191414]/30 backdrop-blur-xl border border-white/10 text-white max-w-3xl w-full mx-auto shadow-2xl transition-all duration-500">
           <h3 className="text-xl font-bold mb-6 text-[#1DB954] tracking-wide uppercase">
-            Who's Listening ({activeUsers.length})
+            Who&apos;s Listening ({activeUsers.length})
           </h3>
       
           <div className="flex flex-wrap gap-5">

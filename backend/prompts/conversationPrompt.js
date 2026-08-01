@@ -17,10 +17,18 @@ export const buildConversationalPrompt = (
       .map((entry) => entry.mood)
       .join(" → ") || "First interaction";
 
-  const formattedHistory =
-    conversationHistory
-      .map((message, index) => `${index + 1}. ${message.sender}: ${message.text}`)
-      .join("\n") || "Starting new conversation";
+  // The history is entirely client-supplied — the browser posts it back on
+  // every turn — so it needs the same boundary userInput gets. Wrapping only
+  // the latest message left an unguarded channel: put the injection in turn one
+  // and it arrives inside the trusted region on turn two.
+  const formattedHistory = conversationHistory.length
+    ? wrapUntrusted(
+        conversationHistory
+          .map((message, index) => `${index + 1}. ${message.sender}: ${message.text}`)
+          .join("\n"),
+        { label: "conversation history" }
+      )
+    : "Starting new conversation";
 
   return `You are ZENOVA, an empathetic music therapy AI assistant. You provide supportive, therapeutic conversations while expertly recommending music to help users with their emotional wellbeing.
 

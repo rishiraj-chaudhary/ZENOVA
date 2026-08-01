@@ -5,9 +5,20 @@ import { buildInsightPrompt } from "../prompts/insightPrompt.js";
 import { generateJson } from "./geminiService.js";
 import { INSIGHT_SCHEMA } from "./schemas.js";
 import logger from "../utils/logger.js";
+import { dayKey } from "../utils/dayKey.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MIN_ENTRIES_FOR_INSIGHT = 5;
+
+
+/**
+ * A direction needs two halves to compare, so it needs more entries than the
+ * dashboard does to unlock. Naming the threshold keeps the two from drifting;
+ * at exactly five entries the dashboard opened and the trend could not be
+ * judged, and the client rendered its fallback — "Holding steady" — as though
+ * the server had asserted it.
+ */
+const MIN_ENTRIES_FOR_TREND = 6;
 
 /**
  * Mood words mapped to a -2..+2 valence so a heterogeneous vocabulary can be
@@ -89,7 +100,9 @@ const dominantMoodByBucket = (entries, bucketFn) => {
  * honest than a regression line over sparse, irregularly-spaced self-reports.
  */
 const describeTrend = (entries) => {
-  if (entries.length < 6) return "not enough data to judge a direction yet";
+  // A stable key, not a sentence: the client looks the value up in a style map,
+  // so a prose fallback silently became whatever the default was.
+  if (entries.length < MIN_ENTRIES_FOR_TREND) return "unknown";
 
   const midpoint = Math.floor(entries.length / 2);
   const mean = (slice) =>
@@ -104,7 +117,10 @@ const describeTrend = (entries) => {
 
 const buildDailySeries = (entries) => {
   const byDay = entries.reduce((days, entry) => {
-    const key = new Date(entry.recordedAt).toISOString().slice(0, 10);
+    // Local calendar day, matching how getDay()/getHours() bucket below. An
+    // ISO slice is UTC, so an 11pm check-in in a positive-offset timezone
+    // plotted on the chart a day after the day-of-week stats assigned it.
+    const key = dayKey(entry.recordedAt);
     (days[key] ??= []).push(entry);
     return days;
   }, {});
@@ -176,6 +192,7 @@ export const buildMoodInsights = async (userId, { periodDays = 30 } = {}) => {
     periodDays,
     totalEntries: entries.length,
     minimumEntriesNeeded: MIN_ENTRIES_FOR_INSIGHT,
+    minimumEntriesForTrend: MIN_ENTRIES_FOR_TREND,
 
     series: buildDailySeries(entries),
     topMoods,

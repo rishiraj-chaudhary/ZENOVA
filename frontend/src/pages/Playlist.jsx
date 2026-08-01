@@ -28,6 +28,12 @@ const readConversationHistory = (userId) => {
 /** The link's destination, not an assumption about it. */
 const isYouTubeLink = (url = "") => /youtu\.?be/i.test(url);
 
+/** `spotify:track:ID` needs the desktop app; the https form works anywhere. */
+const toSpotifyWebUrl = (uri = "") => {
+  const match = uri.match(/^spotify:([a-z]+):([A-Za-z0-9]+)$/);
+  return match ? `https://open.spotify.com/${match[1]}/${match[2]}` : uri;
+};
+
 const Playlists = () => {
   const { user } = useAuth();
   const { connected, joinPlaylist, leavePlaylist } = useSocket();
@@ -405,12 +411,16 @@ const Playlists = () => {
                                         {playlist.songs?.length || 0} songs
                                     </span>
                                     <i className={`fa-solid ${expandedPlaylist === playlist._id ? 'fa-chevron-up' : 'fa-chevron-down'} text-gray-400 text-sm transform transition-transform duration-300 group-hover:scale-125`}></i>
-                                    <button
-                                        onClick={e => { e.stopPropagation(); handleDeletePlaylist(playlist._id); }}
-                                        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs transition-all shadow-sm hover:scale-105"
-                                    >
-                                        <i className="fa-solid fa-trash-alt mr-1 text-[0.7rem]"></i>Delete
-                                    </button>
+                                    {/* Only the owner can delete. Collaborators were shown
+                                        the button anyway and it always failed. */}
+                                    {playlist.isOwner !== false && (
+                                        <button
+                                            onClick={e => { e.stopPropagation(); handleDeletePlaylist(playlist._id); }}
+                                            className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-md text-xs transition-all shadow-sm hover:scale-105"
+                                        >
+                                            <i className="fa-solid fa-trash-alt mr-1 text-[0.7rem]"></i>Delete
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                             {expandedPlaylist === playlist._id && (
@@ -507,9 +517,13 @@ const Playlists = () => {
 
                                                         {/* Bottom Section: Action Buttons (Spotify, YouTube, Preview, Remove) */}
                                                         <div className="flex flex-wrap justify-end gap-2 w-full text-xs mt-auto">
-                                                            {song.spotifyUri && ( // Always show Spotify button if it's there
+                                                            {song.spotifyUri && (
                                                                 <a
-                                                                    href={song.spotifyUri}
+                                                                    // spotify:track:… only resolves if the desktop app is
+                                                                    // installed; in a new tab it is a dead link for everyone
+                                                                    // else. The https form opens the web player or deep-links
+                                                                    // into the app when it is present.
+                                                                    href={toSpotifyWebUrl(song.spotifyUri)}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
                                                                     className="bg-[#1DB954] text-white px-3 py-1 rounded-md flex items-center transition-all duration-300 hover:bg-[#1ed760] shadow-sm hover:scale-105 font-semibold"

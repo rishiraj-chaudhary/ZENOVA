@@ -79,6 +79,12 @@ export const deletePlaylist = async ({ playlistId, ownerId }) => {
   if (!deleted) {
     throw AppError.notFound("Playlist not found or you do not have permission");
   }
+
+  // Otherwise the invitation outlives the playlist: it sits in the recipient's
+  // inbox naming something that no longer exists, and accepting it reports
+  // success while joining nothing.
+  await PlaylistInvitation.deleteMany({ playlistId, status: "pending" });
+
   return deleted;
 };
 
@@ -232,7 +238,18 @@ export const respondToInvitation = async ({ invitationId, userId, accept }) => {
 
   if (!invitation) throw AppError.notFound("Invitation not found");
 
-  if (!accept) return { invitation, playlist: null };
+  // Declining has to remove them if they are already in — someone can accept an
+  // invite link and then decline the pending invitation for the same playlist,
+  // and "Decline" that leaves you a collaborator is not a decline.
+  if (!accept) {
+    const playlist = await Playlist.findByIdAndUpdate(
+      invitation.playlistId,
+      { $pull: { collaborators: userId } },
+      { new: true }
+    );
+
+    return { invitation, playlist: null, removedFrom: playlist };
+  }
 
   const playlist = await Playlist.findByIdAndUpdate(
     invitation.playlistId,

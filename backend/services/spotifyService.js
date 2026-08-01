@@ -157,3 +157,29 @@ export const exchangeAuthorizationCode = (code) =>
 /** Renews an expired user access token. */
 export const refreshUserToken = (refreshToken) =>
   requestUserToken({ grant_type: "refresh_token", refresh_token: refreshToken });
+
+/**
+ * The authenticated Spotify user behind an access token.
+ *
+ * This is what makes "Sign in with Spotify" a sign-in rather than a token
+ * exchange: without it the callback had tokens but no idea whose they were.
+ */
+export const fetchSpotifyProfile = async (accessToken) => {
+  try {
+    const { data } = await axios.get("https://api.spotify.com/v1/me", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    return {
+      spotifyId: data.id,
+      email: data.email ?? null,
+      displayName: data.display_name ?? null,
+      avatarUrl: data.images?.[0]?.url ?? null,
+    };
+  } catch (error) {
+    logger.error("Spotify profile request failed", {
+      detail: error.response?.data ?? error.message,
+    });
+    throw AppError.badGateway("Could not read your Spotify profile");
+  }
+};

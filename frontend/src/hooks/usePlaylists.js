@@ -2,15 +2,19 @@ import { useCallback, useEffect, useState } from "react";
 import * as playlistAPI from "../api/playlistAPI.js";
 import useSocketEvents from "./useSocketEvents.js";
 
-/** Any of these means another collaborator changed a playlist we can see. */
+/**
+ * Any of these means another collaborator changed a playlist we can see.
+ *
+ * `invitation_accepted` and `playlist_updated` used to be here too; nothing on
+ * the server has ever emitted either, so they were subscriptions to events that
+ * could not arrive.
+ */
 const COLLABORATION_EVENTS = [
   "song_added",
   "song_removed",
   "songs_reordered",
   "collaborator_added",
   "collaborator_removed",
-  "invitation_accepted",
-  "playlist_updated",
 ];
 
 /**

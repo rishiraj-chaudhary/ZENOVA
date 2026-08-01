@@ -44,7 +44,9 @@ const InvitationsInbox = ({ onAccepted }) => {
         }
     };
 
-    if (invitations.length === 0) return null;
+    // The early return used to come first, so a failed load set an error that
+    // could never render: the list is empty precisely when loading failed.
+    if (invitations.length === 0 && !error) return null;
 
     return (
         <div className="mb-6 bg-gradient-to-br from-purple-900/30 to-blue-900/30 backdrop-blur-md border border-purple-700/20 rounded-2xl shadow-lg p-5">

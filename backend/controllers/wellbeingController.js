@@ -83,8 +83,17 @@ export const submitSongFeedback = asyncHandler(async (req, res) => {
 });
 
 export const clearSongFeedback = asyncHandler(async (req, res) => {
-  await removeFeedback({ userId: req.user._id, musicId: req.params.musicId });
-  res.json({ message: "Feedback removed" });
+  const removed = await removeFeedback({
+    userId: req.user._id,
+    musicId: req.params.musicId,
+  });
+
+  // "Feedback removed" was reported whether or not anything matched, so a
+  // client whose delete silently missed still showed the rating as cleared.
+  res.json({
+    removed,
+    message: removed ? "Feedback removed" : "No feedback to remove",
+  });
 });
 
 export const beginListeningSession = asyncHandler(async (req, res) => {

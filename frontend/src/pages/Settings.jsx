@@ -20,7 +20,7 @@ const Section = ({ title, description, children, danger = false }) => (
 );
 
 const Settings = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, applyConsent } = useAuth();
   const navigate = useNavigate();
 
   const [consent, setConsent] = useState(user?.consent?.moodTracking ?? false);
@@ -46,7 +46,13 @@ const Settings = () => {
   const handleConsentChange = (enabled) => {
     setConsent(enabled);
     run(
-      () => updateConsent(enabled),
+      async () => {
+        await updateConsent(enabled);
+        // Everything gated on consent — the daily check-in card most visibly —
+        // reads it from the auth context, which was never updated. Turning
+        // mood tracking on did nothing until the page was reloaded.
+        applyConsent(enabled);
+      },
       enabled ? "Mood tracking is on" : "Mood tracking is off — nothing new will be saved"
     );
   };

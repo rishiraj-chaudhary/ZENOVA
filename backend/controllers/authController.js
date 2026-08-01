@@ -11,6 +11,7 @@ import {
   revokeToken,
   rotateRefreshToken,
 } from "../services/refreshTokenService.js";
+import { establishSession } from "../services/authSessionService.js";
 import { destroySessionsForUser } from "../services/sessionStoreService.js";
 import AppError from "../utils/AppError.js";
 import asyncHandler from "../utils/asyncHandler.js";
@@ -27,18 +28,6 @@ import {
  * also returned in the body as a compatibility path for clients whose browser
  * blocks the cross-site cookie — see utils/refreshCookie.js.
  */
-const establishSession = async (req, res, user) => {
-  const refreshToken = await issueRefreshToken(user._id, {
-    userAgent: req.headers["user-agent"],
-  });
-
-  setRefreshCookie(res, refreshToken);
-
-  return {
-    user: { ...user, token: issueAccessToken(user._id) },
-    refreshToken,
-  };
-};
 
 export const register = asyncHandler(async (req, res) => {
   const { user } = await registerUser(req.body);

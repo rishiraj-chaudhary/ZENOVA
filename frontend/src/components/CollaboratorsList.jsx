@@ -50,7 +50,9 @@ const CollaboratorsList = ({ playlistId, isOwner }) => {
         }
     };
 
-    if(collaborators.length===0 && !loading){
+    // Same reason as InvitationsInbox: bailing on an empty list hid the error
+    // that explains why the list is empty.
+    if (collaborators.length === 0 && !loading && !error) {
         return null;
     }
     return (

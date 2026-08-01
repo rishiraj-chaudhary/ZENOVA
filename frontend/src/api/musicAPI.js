@@ -6,7 +6,14 @@ export const fetchRecommendations = ({ message, conversationHistory }) =>
     conversationHistory,
   });
 
-export const fetchSpotifyAuthUrl = () => apiClient.get("/music/recommend/spotify/auth");
+/**
+ * `intent` decides what the callback does: "login" signs you into ZENOVA with
+ * your Spotify account, "connect" attaches Spotify to the account you are
+ * already signed into. The server records it in the session, so the redirect
+ * cannot be re-pointed at a different outcome.
+ */
+export const fetchSpotifyAuthUrl = (intent = "connect") =>
+  apiClient.get("/music/recommend/spotify/auth", { params: { intent } });
 
 export const exchangeSpotifyCode = ({ code, state }) =>
   apiClient.get("/music/recommend/spotify/callback", { params: { code, state } });
