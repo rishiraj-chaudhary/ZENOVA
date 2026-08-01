@@ -86,6 +86,7 @@ const candidateModels = (requested) => {
  */
 const generate = async (operation, prompt, responseSchema, modelName) => {
   const models = candidateModels(modelName);
+  const primary = models[0];
   let lastError;
 
   for (const name of models) {
@@ -96,11 +97,20 @@ const generate = async (operation, prompt, responseSchema, modelName) => {
         const result = await getModel(responseSchema, name).generateContent(prompt);
         const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
 
-        recordLlmCall({ operation, durationMs, outcome: "success", ...usageOf(result) });
+        recordLlmCall({
+          operation,
+          durationMs,
+          outcome: "success",
+          // Reported so a quota-exhausted or retired primary cannot hide behind
+          // a chain that keeps succeeding on something else.
+          model: name,
+          wasFallback: name !== primary,
+          ...usageOf(result),
+        });
         return result.response.text().trim();
       } catch (error) {
         const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
-        recordLlmCall({ operation, durationMs, outcome: "error" });
+        recordLlmCall({ operation, durationMs, outcome: "error", model: name });
         lastError = error;
 
         // A non-retryable error means *this model* cannot serve the request —

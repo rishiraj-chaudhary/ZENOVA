@@ -41,18 +41,38 @@ const MOOD_VALENCE = {
 
 export const valenceOf = (mood) => MOOD_VALENCE[mood?.toLowerCase()] ?? 0;
 
-const timeOfDay = (date) => {
-  const hour = new Date(date).getHours();
+/**
+ * The wall-clock hour and weekday where the user was, not where the server is.
+ *
+ * These read `getHours()` / `getDay()`, which on Render means UTC — so a
+ * check-in at 9pm in India was filed under 15:30 "afternoon" and, near
+ * midnight, under the wrong day of the week entirely. The whole point of these
+ * two statistics is which part of *their* day is hardest.
+ */
+const partsIn = (date, timeZone) => {
+  const formatted = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    hour: "2-digit",
+    weekday: "short",
+    hour12: false,
+  }).formatToParts(new Date(date));
+
+  const value = (type) => formatted.find((part) => part.type === type)?.value;
+
+  return {
+    hour: Number.parseInt(value("hour"), 10),
+    weekday: value("weekday"),
+  };
+};
+
+const timeOfDay = (date, timeZone) => {
+  const { hour } = partsIn(date, timeZone);
   if (hour < 6) return "night";
   if (hour < 12) return "morning";
   if (hour < 17) return "afternoon";
   if (hour < 22) return "evening";
   return "night";
 };
-
-const DAY_NAMES = [
-  "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
-];
 
 const countBy = (items, keyFn) =>
   items.reduce((counts, item) => {
@@ -115,12 +135,12 @@ const describeTrend = (entries) => {
   return "steady";
 };
 
-const buildDailySeries = (entries) => {
+const buildDailySeries = (entries, timeZone) => {
   const byDay = entries.reduce((days, entry) => {
     // Local calendar day, matching how getDay()/getHours() bucket below. An
     // ISO slice is UTC, so an 11pm check-in in a positive-offset timezone
     // plotted on the chart a day after the day-of-week stats assigned it.
-    const key = dayKey(entry.recordedAt);
+    const key = dayKey(entry.recordedAt, timeZone);
     (days[key] ??= []).push(entry);
     return days;
   }, {});
@@ -157,7 +177,10 @@ const summariseEfficacy = (outcomes) => {
  * Computes every statistic the dashboard and the AI narrative need.
  * All derivation happens here in code; the model only phrases the result.
  */
-export const buildMoodInsights = async (userId, { periodDays = 30 } = {}) => {
+export const buildMoodInsights = async (
+  userId,
+  { periodDays = 30, timeZone = "UTC" } = {}
+) => {
   const since = new Date(Date.now() - periodDays * MS_PER_DAY);
 
   const [entries, outcomes, feedback] = await Promise.all([
@@ -178,7 +201,7 @@ export const buildMoodInsights = async (userId, { periodDays = 30 } = {}) => {
     .map(([mood, count]) => ({ mood, count }));
 
   const valenceByDay = averageValenceByBucket(entries, (date) =>
-    DAY_NAMES[new Date(date).getDay()]
+    partsIn(date, timeZone).weekday
   );
   const rankedDays = Object.entries(valenceByDay).sort(([, a], [, b]) => a - b);
 
@@ -194,11 +217,13 @@ export const buildMoodInsights = async (userId, { periodDays = 30 } = {}) => {
     minimumEntriesNeeded: MIN_ENTRIES_FOR_INSIGHT,
     minimumEntriesForTrend: MIN_ENTRIES_FOR_TREND,
 
-    series: buildDailySeries(entries),
+    series: buildDailySeries(entries, timeZone),
     topMoods,
     trend: describeTrend(entries),
 
-    moodByTimeOfDay: dominantMoodByBucket(entries, timeOfDay),
+    moodByTimeOfDay: dominantMoodByBucket(entries, (date) =>
+      timeOfDay(date, timeZone)
+    ),
     moodByDayOfWeek: {
       hardest: rankedDays[0]?.[0] ?? null,
       easiest: rankedDays.at(-1)?.[0] ?? null,

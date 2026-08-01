@@ -23,6 +23,21 @@ const createBucket = () => ({
   promptTokens: 0,
   outputTokens: 0,
   latencies: [],
+
+  /**
+   * Which model actually answered, counted per name.
+   *
+   * A failover chain can mask a dead or quota-exhausted primary indefinitely:
+   * every request 429s at the head, falls through, and succeeds on a model
+   * nobody chose — while the success rate stays at 100% and the configured
+   * model name says something untrue. Without this, "which model served this?"
+   * is unanswerable from the outside, and any eval result describes a model you
+   * may not be running.
+   */
+  servedBy: {},
+
+  /** Requests that did not get the configured primary model. */
+  fellBack: 0,
 });
 
 const buckets = new Map();
@@ -38,12 +53,19 @@ export const recordLlmCall = ({
   outcome,
   promptTokens = 0,
   outputTokens = 0,
+  model,
+  wasFallback = false,
 }) => {
   const bucket = bucketFor(operation);
 
   bucket.calls += 1;
   bucket.promptTokens += promptTokens;
   bucket.outputTokens += outputTokens;
+
+  if (outcome === "success" && model) {
+    bucket.servedBy[model] = (bucket.servedBy[model] ?? 0) + 1;
+    if (wasFallback) bucket.fellBack += 1;
+  }
 
   if (outcome === "success") bucket.success += 1;
   else if (outcome === "parse_error") bucket.parseErrors += 1;
@@ -74,6 +96,11 @@ const summariseBucket = (bucket) => {
     promptTokens: bucket.promptTokens,
     outputTokens: bucket.outputTokens,
     estimatedCostUsd: Number(costOf(bucket).toFixed(4)),
+
+    // The answer to "which model is actually serving this?" — see createBucket.
+    servedBy: bucket.servedBy,
+    fallbackRate: bucket.success ? bucket.fellBack / bucket.success : null,
+
     latencyMs: {
       p50: Math.round(percentile(sorted, 0.5)),
       p95: Math.round(percentile(sorted, 0.95)),

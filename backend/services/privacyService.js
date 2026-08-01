@@ -3,7 +3,6 @@ import Leaderboard from "../models/Leaderboard.js";
 import PlaylistInvitation from "../models/PlaylistInvitation.js";
 import PointAward from "../models/PointAward.js";
 import RefreshToken from "../models/RefreshToken.js";
-import TherapySession from "../models/TherapySession.js";
 import MoodEntry from "../models/MoodEntry.js";
 import Playlist from "../models/Playlist.js";
 import Recommendation from "../models/Recommendation.js";
@@ -94,14 +93,11 @@ export const exportUserData = async (userId) => {
 const eraseWellbeing = async (userId, session) => {
   const options = session ? { session } : {};
 
-  const [moods, feedback, outcomes, recommendations, chats] = await Promise.all([
+  const [moods, feedback, outcomes, recommendations] = await Promise.all([
     MoodEntry.deleteMany({ userId }, options),
     ListeningFeedback.deleteMany({ userId }, options),
     SessionOutcome.deleteMany({ userId }, options),
     Recommendation.deleteMany({ userId }, options),
-    // The chat log records what the user said to get each recommendation, which
-    // is the same disclosure as the mood history it produced.
-    TherapySession.deleteMany({ userId }, options),
   ]);
 
   // Counters derived from the records above are the same data in a different
@@ -118,7 +114,6 @@ const eraseWellbeing = async (userId, session) => {
     songFeedback: feedback.deletedCount,
     sessionOutcomes: outcomes.deletedCount,
     recommendationSessions: recommendations.deletedCount,
-    chatSessions: chats.deletedCount,
   };
 };
 

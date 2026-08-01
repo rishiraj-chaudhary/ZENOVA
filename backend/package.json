@@ -13,7 +13,9 @@
     "eval:safety": "node evals/runSafetyEval.js",
     "backfill:streaks": "node scripts/backfillStreakDays.js",
     "e2e": "node scripts/e2e.mjs",
-    "backfill:previews": "node scripts/backfillPreviews.js"
+    "backfill:previews": "node scripts/backfillPreviews.js",
+    "verify:models": "node scripts/verifyModels.js",
+    "backfill:timezone": "node scripts/backfillTimeZone.js"
   },
   "keywords": [],
   "author": "",

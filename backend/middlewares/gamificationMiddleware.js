@@ -87,7 +87,12 @@ export const trackDailyLogin = (req, res, next) => {
       // bonus once-daily. It previously paid on every login, so logging out and
       // back in farmed points indefinitely.
       await awardPoints(userId, "DAILY_LOGIN", req.socketManager);
-      await updateStreak(userId, req.socketManager);
+      // The user's own midnight. updateStreak has always accepted a
+      // timeZone; nothing ever passed one, so every streak rolled over at
+      // UTC midnight regardless of where the person was.
+      await updateStreak(userId, req.socketManager, {
+        timeZone: req.user.timeZone,
+      });
       await checkAndAwardBadges(userId, req.socketManager);
     });
   }

@@ -13,6 +13,7 @@ import {
 import protect from "../middlewares/authMiddleware.js";
 import { trackDailyLogin } from "../middlewares/gamificationMiddleware.js";
 import validateRequest from "../middlewares/validateRequest.js";
+import { OPTIONAL } from "../utils/validation.js";
 
 const router = express.Router();
 
@@ -22,6 +23,7 @@ router.post(
   [
     body("name").isString().trim().notEmpty().withMessage("Name is required"),
     body("email").isEmail().normalizeEmail().withMessage("Enter a valid email"),
+    body("timeZone").optional(OPTIONAL).isString().isLength({ max: 64 }),
     body("password")
       .isLength({ min: 6 })
       .withMessage("Password should be 6 characters or more"),

@@ -54,6 +54,18 @@ const userSchema = new mongoose.Schema(
     onboardedAt: { type: Date, default: null },
 
     /**
+     * The user's IANA timezone, captured from the browser at registration.
+     *
+     * Everything day-shaped is wrong without it. `dayKey` and `updateStreak`
+     * both accept a timeZone and both defaulted to UTC because no caller ever
+     * passed one — so a streak rolled over at UTC midnight, which is 05:30 in
+     * India: an evening check-in and the next morning's counted as the same day
+     * and the streak never advanced. Insights had the same problem from the
+     * other direction, bucketing by the server's clock.
+     */
+    timeZone: { type: String, default: "UTC" },
+
+    /**
      * Explicit consent to store mood history (GDPR Art. 9 / DPDP special
      * category data). Absent consent, check-ins are not persisted.
      */
@@ -75,7 +87,6 @@ const userSchema = new mongoose.Schema(
 
     feedbackHistory: [
       {
-        sessionId: { type: mongoose.Schema.Types.ObjectId, ref: "TherapySession" },
         rating: { type: Number, min: 1, max: 5 },
         comment: { type: String },
       },

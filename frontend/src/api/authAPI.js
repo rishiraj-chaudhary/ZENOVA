@@ -1,8 +1,18 @@
 import { getStoredRefreshToken } from "../utils/authStorage.js";
 import apiClient from "./client.js";
 
+/**
+ * The browser's timezone travels with registration.
+ *
+ * Everything day-shaped depends on it — streaks roll over at the user's
+ * midnight, and the hardest-hour statistic is about their day, not the
+ * server's. Sent once here rather than guessed server-side from an IP.
+ */
 export const register = (credentials) =>
-  apiClient.post("/auth/register", credentials);
+  apiClient.post("/auth/register", {
+    ...credentials,
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  });
 
 export const login = (credentials) => apiClient.post("/auth/login", credentials);
 

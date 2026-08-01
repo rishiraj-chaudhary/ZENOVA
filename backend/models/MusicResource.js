@@ -18,19 +18,6 @@ const musicResourceSchema = new mongoose.Schema({
   popularity: { type: Number }, // Spotify popularity score (0-100)
   explicit: { type: Boolean, default: false },
 
-  //NEW
-  // Add Spotify audio features
-  audioFeatures: {
-    danceability: Number,
-    energy: Number,
-    valence: Number, // Positivity/happiness measure
-    tempo: Number,
-    acousticness: Number,
-    instrumentalness: Number,
-    liveness: Number,
-    speechiness: Number
-  },
-  
   culturalTags: [String],
 
   // Therapeutic classification, produced by the recommendation engine.

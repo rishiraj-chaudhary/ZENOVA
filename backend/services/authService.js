@@ -24,13 +24,26 @@ const toPublicUser = (user) => ({
   email: user.email,
   onboardedAt: user.onboardedAt ?? null,
   preferences: user.preferences ?? [],
+  timeZone: user.timeZone ?? "UTC",
   consent: {
     moodTracking: user.consent?.moodTracking ?? false,
     grantedAt: user.consent?.grantedAt ?? null,
   },
 });
 
-export const registerUser = async ({ name, email, password }) => {
+/** Only accept a timezone the platform recognises; anything else is UTC. */
+const safeTimeZone = (timeZone) => {
+  if (!timeZone || typeof timeZone !== "string") return "UTC";
+
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone });
+    return timeZone;
+  } catch {
+    return "UTC";
+  }
+};
+
+export const registerUser = async ({ name, email, password, timeZone }) => {
   const normalizedEmail = email.toLowerCase().trim();
 
   if (await User.exists({ email: normalizedEmail })) {
@@ -41,6 +54,7 @@ export const registerUser = async ({ name, email, password }) => {
     name,
     email: normalizedEmail,
     password: await hashPassword(password),
+    timeZone: safeTimeZone(timeZone),
   });
 
   return { user: toPublicUser(user) };

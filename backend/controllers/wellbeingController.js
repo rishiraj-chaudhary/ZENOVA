@@ -66,7 +66,10 @@ export const getMoodHistory = asyncHandler(async (req, res) => {
 export const getInsights = asyncHandler(async (req, res) => {
   const periodDays = Math.min(Number(req.query.periodDays) || 30, 365);
 
-  const insights = await buildMoodInsights(req.user._id, { periodDays });
+  const insights = await buildMoodInsights(req.user._id, {
+    periodDays,
+    timeZone: req.user.timeZone,
+  });
   const narrative = await generateInsightNarrative(insights);
 
   res.json({ ...insights, narrative });
