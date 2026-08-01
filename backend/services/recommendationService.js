@@ -7,6 +7,7 @@ import parseRequestedSongCount from "../utils/parseRequestedSongCount.js";
 import { generateJson, generateText } from "./geminiService.js";
 import { RECOMMENDATION_SCHEMA } from "./schemas.js";
 import { getLatestSelfRating, recordMood } from "./moodService.js";
+import { hasMoodConsent } from "./consentService.js";
 import {
   ELEVATED_RISK_PROMPT_GUIDANCE,
   RISK_LEVELS,
@@ -244,9 +245,14 @@ export const generateRecommendations = async ({
 
   const detectedMood = result.detectedMood ?? currentMood;
 
+  // A mood the model inferred from the message is still health data. Without
+  // consent the recommendation is still recorded — it is a log of what the
+  // service returned — but the inferred emotional state is not attached to it.
+  const mayStoreMood = await hasMoodConsent(userId);
+
   const recommendation = await Recommendation.create({
     userId,
-    detectedMood,
+    detectedMood: mayStoreMood ? detectedMood : undefined,
     therapeuticGoal: result.therapeuticGoal,
     recommendedMusic: recommendations.map((entry) => ({
       musicId: entry.musicId,

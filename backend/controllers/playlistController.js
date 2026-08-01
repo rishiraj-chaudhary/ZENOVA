@@ -173,8 +173,14 @@ export const acceptInvitation = asyncHandler(async (req, res) => {
   });
 
   if (!alreadyMember) {
-    broadcasterFor(req).toPlaylist(playlist._id, "user_joined", {
-      ...describeActor(req.user),
+    // Not "user_joined": that event carries the full presence roster and the
+    // client replaces its list with `data.users`, so emitting it from here —
+    // with no roster to send — blanked "Who's Listening" for everyone watching.
+    // Joining as a collaborator is not the same thing as being present.
+    broadcasterFor(req).toPlaylist(playlist._id, "collaborator_added", {
+      playlistId: playlist._id,
+      collaborator: describeActor(req.user),
+      addedBy: describeActor(req.user),
       joinedVia: "invitation",
     });
   }

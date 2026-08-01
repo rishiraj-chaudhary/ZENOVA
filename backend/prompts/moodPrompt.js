@@ -1,6 +1,14 @@
 import { wrapUntrusted } from "../utils/untrustedContent.js";
+// moodHistory is newest-first, so slice(-5) returned the oldest five in the
+// window rather than the most recent — the model was reasoning about the wrong
+// week. (conversationHistory below really is oldest-first, so slice(-limit)
+// there is correct.)
 const formatRecentMoods = (moodHistory) =>
-  moodHistory.slice(-5).map((entry) => entry.mood).join(", ") || "No previous data";
+  moodHistory
+    .slice(0, 5)
+    .reverse()
+    .map((entry) => entry.mood)
+    .join(", ") || "No previous data";
 
 const formatConversation = (conversationHistory, limit) =>
   conversationHistory

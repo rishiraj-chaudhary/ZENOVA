@@ -185,6 +185,19 @@ const start = async () => {
 };
 
 /**
+ * A throw inside a Socket.IO event listener reaches the process: socket.io
+ * dispatches listeners on a bare process.nextTick with no try/catch. Without
+ * this handler one malformed packet from any authenticated client ends the
+ * process and takes every other user's session with it.
+ *
+ * Logged and survived rather than exited, because the request that caused it is
+ * already lost and the rest of the server is still serving correctly.
+ */
+process.on("uncaughtException", (error) => {
+  logger.error("uncaught exception", { detail: error.message, stack: error.stack });
+});
+
+/**
  * An unhandled rejection leaves the process in an unknown state; log it and
  * exit so the supervisor restarts cleanly rather than serving from a broken one.
  */

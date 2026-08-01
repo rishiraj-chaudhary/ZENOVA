@@ -37,16 +37,23 @@ export const handleSpotifyCallback = asyncHandler(async (req, res) => {
   const { code, state } = req.query;
   if (!code) throw AppError.badRequest("Missing authorization code");
 
-  // Guards against CSRF on the OAuth redirect. Only enforced when a state was
-  // issued in this session, so an in-flight login started before this change
-  // still completes.
+  // Fails closed. Enforcing only "when a state was issued" made the check
+  // worthless: an attacker just has to get the victim to the callback without a
+  // session, and since the state was also deleted before the exchange, any
+  // retry arrived with none. Both holes let an attacker's authorization code be
+  // exchanged into the victim's browser.
   const expectedState = req.session?.spotifyAuthState;
-  if (expectedState && state !== expectedState) {
-    throw AppError.badRequest("Invalid OAuth state");
+  if (!expectedState || state !== expectedState) {
+    throw AppError.badRequest("Invalid or missing OAuth state");
   }
-  if (req.session) delete req.session.spotifyAuthState;
 
-  res.json(await exchangeAuthorizationCode(code));
+  const tokens = await exchangeAuthorizationCode(code);
+
+  // Consumed only once the exchange succeeded, so a transient Spotify failure
+  // leaves the user able to retry rather than permanently unable to connect.
+  delete req.session.spotifyAuthState;
+
+  res.json(tokens);
 });
 
 export const refreshSpotifyToken = asyncHandler(async (req, res) => {

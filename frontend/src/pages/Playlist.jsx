@@ -25,6 +25,9 @@ const readConversationHistory = (userId) => {
   }
 };
 
+/** The link's destination, not an assumption about it. */
+const isYouTubeLink = (url = "") => /youtu\.?be/i.test(url);
+
 const Playlists = () => {
   const { user } = useAuth();
   const { connected, joinPlaylist, leavePlaylist } = useSocket();
@@ -514,14 +517,20 @@ const Playlists = () => {
                                                                     <i className="fa-brands fa-spotify mr-1"></i> Spotify
                                                                 </a>
                                                             )}
-                                                            {song.audioUrl && ( // YouTube button
+                                                            {/* Labelled by where the link actually goes. This was hardcoded
+                                                                as "YouTube" while pointing at audioUrl, which the
+                                                                recommendation pipeline fills with a Spotify URL for most
+                                                                songs — a red YouTube button that opened Spotify. It is also
+                                                                hidden when it would just duplicate the Spotify button above. */}
+                                                            {song.audioUrl && song.audioUrl !== song.spotifyUri && (
                                                                 <a
                                                                     href={song.audioUrl}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
-                                                                    className="px-3 py-1 rounded-md font-medium flex items-center bg-red-600 text-white shadow-sm hover:scale-105 transition-all duration-300 hover:bg-red-700"
+                                                                    className={`px-3 py-1 rounded-md font-medium flex items-center text-white shadow-sm hover:scale-105 transition-all duration-300 ${isYouTubeLink(song.audioUrl) ? "bg-red-600 hover:bg-red-700" : "bg-slate-600 hover:bg-slate-700"}`}
                                                                 >
-                                                                    <i className="fa-brands fa-youtube mr-1"></i> YouTube
+                                                                    <i className={`fa-brands ${isYouTubeLink(song.audioUrl) ? "fa-youtube" : "fa-spotify"} mr-1`}></i>
+                                                                    {isYouTubeLink(song.audioUrl) ? "YouTube" : "Listen"}
                                                                 </a>
                                                             )}
                                                             {song.previewUrl && ( // Preview Audio

@@ -37,12 +37,20 @@ class SocketManager {
       // socket subscribe to another user's private notifications.
       socket.join(userRoom(userId));
 
-      socket.on("join_playlist", ({ playlistId }) =>
-        this.handleJoinPlaylist(socket, playlistId)
+      // Payloads are destructured defensively and rejections are caught. Both
+      // matter: `socket.emit("join_playlist")` with no argument used to throw a
+      // TypeError inside socket.io's dispatch, which runs on a bare
+      // process.nextTick with no try/catch, so one line in any user's browser
+      // console took the whole API down. The async handler's rejection escaped
+      // the same way, into the unhandledRejection handler that exits.
+      socket.on("join_playlist", (payload) =>
+        this.handleJoinPlaylist(socket, payload?.playlistId).catch((error) =>
+          logger.warn("join_playlist failed", { detail: error.message })
+        )
       );
 
-      socket.on("leave_playlist", ({ playlistId }) =>
-        this.handleLeavePlaylist(socket, playlistId)
+      socket.on("leave_playlist", (payload) =>
+        this.handleLeavePlaylist(socket, payload?.playlistId)
       );
 
       socket.on("disconnect", () => this.handleDisconnect(socket));

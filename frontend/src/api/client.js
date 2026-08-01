@@ -81,7 +81,17 @@ const refreshSession = async () => {
   return refreshInFlight;
 };
 
-const isRefreshRequest = (config) => config?.url?.includes("/auth/refresh");
+/**
+ * Endpoints whose 401 means "those credentials are wrong", not "your session
+ * expired". Retrying them after a refresh is nonsense — a mistyped password is
+ * still wrong with a fresh access token — and the fallout was real: the failed
+ * retry ran endSession(), so one typo on the login form signed the user out of
+ * the session they already had and spent a rotation of their refresh token.
+ */
+const isCredentialRequest = (config) =>
+  ["/auth/login", "/auth/register", "/auth/refresh"].some((path) =>
+    config?.url?.includes(path)
+  );
 
 apiClient.interceptors.response.use(
   (response) => response.data,
@@ -89,7 +99,7 @@ apiClient.interceptors.response.use(
     const { config, response } = error;
 
     // Retry once after a refresh. The flag stops a failed retry looping.
-    if (response?.status === 401 && config && !config._retried && !isRefreshRequest(config)) {
+    if (response?.status === 401 && config && !config._retried && !isCredentialRequest(config)) {
       config._retried = true;
 
       try {
@@ -99,7 +109,7 @@ apiClient.interceptors.response.use(
       } catch {
         endSession();
       }
-    } else if (response?.status === 401) {
+    } else if (response?.status === 401 && !isCredentialRequest(config)) {
       endSession();
     }
 

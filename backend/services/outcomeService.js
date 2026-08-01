@@ -2,6 +2,7 @@ import Recommendation from "../models/Recommendation.js";
 import SessionOutcome from "../models/SessionOutcome.js";
 import AppError from "../utils/AppError.js";
 import { checkAndAwardBadges } from "./badgeService.js";
+import { hasMoodConsent } from "./consentService.js";
 import { awardPoints } from "./pointsService.js";
 import { recordSessionEffect } from "./songEffectService.js";
 
@@ -12,6 +13,14 @@ import { recordSessionEffect } from "./songEffectService.js";
  * existing record rather than creating a competing one.
  */
 export const startSession = async ({ userId, sessionId, moodBefore }) => {
+  // moodBefore is self-reported health data. Enforced here rather than in the
+  // UI so no caller can persist it by accident.
+  if (!(await hasMoodConsent(userId))) {
+    throw AppError.forbidden(
+      "Mood tracking consent is required to record how you are feeling"
+    );
+  }
+
   const recommendation = await Recommendation.findOne({
     _id: sessionId,
     userId,
@@ -65,6 +74,12 @@ export const markSessionListened = async ({ userId, sessionId, socketManager }) 
  * ledger, which is what turns an individual rating into ranking evidence.
  */
 export const completeSession = async ({ userId, sessionId, moodAfter, socketManager }) => {
+  if (!(await hasMoodConsent(userId))) {
+    throw AppError.forbidden(
+      "Mood tracking consent is required to record how you are feeling"
+    );
+  }
+
   const outcome = await SessionOutcome.findOneAndUpdate(
     { sessionId, userId },
     { moodAfter, completedAt: new Date() },

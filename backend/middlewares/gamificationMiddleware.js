@@ -24,14 +24,34 @@ const runInBackground = (label, task) => {
  * falling back to the request. Without this, deleting and recreating a playlist
  * paid every time.
  */
-const entityKeyFrom = (body, req) =>
-  body?._id?.toString() ??
-  body?.playlist?._id?.toString() ??
-  req.body?.playlistId ??
-  req.params?.playlistId ??
-  body?.collaborator?._id?.toString() ??
-  req.body?.songId ??
-  null;
+const entityKeyFrom = (action, body, req) => {
+  // Adding a song is per song, not per playlist. This used to fall through to
+  // `body._id` — and /playlists/addsong responds with the playlist — so every
+  // song after the first in a given playlist was treated as a duplicate award
+  // and paid nothing, forever.
+  if (action === "SONG_ADDED") {
+    const playlistId = req.body?.playlistId ?? req.params?.playlistId;
+    const songId = req.body?.songId;
+    return songId ? `${playlistId ?? "playlist"}:${songId}` : null;
+  }
+
+  // Sharing is per recipient where there is one, so inviting three people is
+  // three shares but re-inviting the same person is not.
+  if (action === "PLAYLIST_SHARED") {
+    const playlistId = req.body?.playlistId ?? req.params?.playlistId;
+    const recipient = req.body?.username ?? body?.invitee?._id?.toString();
+    return recipient ? `${playlistId}:${recipient}` : (playlistId ?? null);
+  }
+
+  return (
+    body?._id?.toString() ??
+    body?.playlist?._id?.toString() ??
+    req.body?.playlistId ??
+    req.params?.playlistId ??
+    body?.collaborator?._id?.toString() ??
+    null
+  );
+};
 
 export const trackAction = (action) => (req, res, next) => {
   const originalJson = res.json.bind(res);
@@ -43,7 +63,7 @@ export const trackAction = (action) => (req, res, next) => {
     if (!awarded && succeeded && req.user?._id) {
       awarded = true;
       const userId = req.user._id;
-      const entityKey = entityKeyFrom(body, req);
+      const entityKey = entityKeyFrom(action, body, req);
 
       runInBackground(`Gamification (${action})`, async () => {
         await awardPoints(userId, action, req.socketManager, { entityKey });

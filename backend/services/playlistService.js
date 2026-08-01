@@ -263,7 +263,14 @@ export const regenerateInviteLink = async ({ playlistId, ownerId }) => {
 export const buildInviteQrCode = async ({ playlistId, ownerId }) => {
   const playlist = await findOwnedPlaylist(playlistId, ownerId);
 
-  if (!playlist.inviteLink?.code) {
+  // Reusing the code kept an existing link and its QR in sync, but it also
+  // handed out QR codes for codes that had already expired — most playlists in
+  // the database are past their seven days — and acceptInvitation rejects
+  // those, so the QR scanned to "Invalid or expired invitation link".
+  const expired =
+    !playlist.inviteLink?.expiresAt || playlist.inviteLink.expiresAt <= new Date();
+
+  if (!playlist.inviteLink?.code || expired) {
     playlist.inviteLink = {
       code: generateInviteCode(),
       expiresAt: new Date(Date.now() + INVITE_TTL_MS),
@@ -308,7 +315,9 @@ export const listCollaborators = async ({ playlistId, userId }) => {
     _id: playlistId,
     $or: [{ userId }, { collaborators: userId }],
   })
-    .populate("collaborators", "name email")
+    // Names only. Emails were populated here and rendered in the UI, so joining
+    // any shared playlist disclosed every other collaborator's email address.
+    .populate("collaborators", "name")
     .lean();
 
   if (!playlist) {
@@ -334,6 +343,15 @@ export const removeCollaborator = async ({ playlistId, ownerId, collaboratorId }
   playlist.collaborators = playlist.collaborators.filter(
     (id) => !sameId(id, collaboratorId)
   );
+
+  // Removal has to revoke the invite link too. Anyone who still holds the URL —
+  // the person just removed, most obviously — could re-join with a single
+  // request, so the removal only appeared to work.
+  playlist.inviteLink = {
+    code: generateInviteCode(),
+    expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+  };
+
   await playlist.save();
 
   return collaborator;

@@ -2,6 +2,17 @@ const USER_ID_KEY = "userId";
 const REFRESH_KEY = "zenova_refresh";
 
 /**
+ * A hint, in localStorage, that this browser probably has a live session.
+ *
+ * Not a credential — the refresh token itself stays in an httpOnly cookie the
+ * page cannot read. It exists because the restore gate used to read only
+ * sessionStorage, which is per-tab and cleared when the browser closes: the
+ * 30-day refresh cookie was still perfectly valid but nothing ever tried to use
+ * it, so every browser restart and every new tab looked like a signed-out user.
+ */
+const SESSION_HINT_KEY = "zenova_has_session";
+
+/**
  * Access token lives in memory only.
  *
  * It was previously a 30-day JWT in sessionStorage, so any XSS meant a
@@ -31,12 +42,14 @@ export const storeAuth = ({ token, userId, refreshToken }) => {
   setAccessToken(token);
   if (userId) sessionStorage.setItem(USER_ID_KEY, userId);
   if (refreshToken) sessionStorage.setItem(REFRESH_KEY, refreshToken);
+  localStorage.setItem(SESSION_HINT_KEY, "1");
 };
 
 export const clearStoredAuth = () => {
   setAccessToken(null);
   sessionStorage.removeItem(USER_ID_KEY);
   sessionStorage.removeItem(REFRESH_KEY);
+  localStorage.removeItem(SESSION_HINT_KEY);
 };
 
 export const getStoredUserId = () => sessionStorage.getItem(USER_ID_KEY);
@@ -49,4 +62,9 @@ export const getStoredUserId = () => sessionStorage.getItem(USER_ID_KEY);
  * refresh rather than assume the user is signed out.
  */
 export const hasStoredAuth = () =>
-  Boolean(accessToken || getStoredUserId() || getStoredRefreshToken());
+  Boolean(
+    accessToken ||
+      getStoredUserId() ||
+      getStoredRefreshToken() ||
+      localStorage.getItem(SESSION_HINT_KEY)
+  );

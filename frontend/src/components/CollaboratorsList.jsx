@@ -89,7 +89,9 @@ const CollaboratorsList = ({ playlistId, isOwner }) => {
                             </div>
                             <div>
                                 <div className="font-medium text-white">{collaborator.name}</div>
-                                <div className="text-xs text-gray-400 font-light">{collaborator.email}</div>
+                                {/* Email removed: the server no longer discloses other
+                                    collaborators' addresses, and it should never have. */}
+                                <div className="text-xs text-gray-400 font-light">Collaborator</div>
                             </div>
                         </div>
                         {isOwner && (

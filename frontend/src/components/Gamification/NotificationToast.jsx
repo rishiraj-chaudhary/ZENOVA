@@ -10,22 +10,30 @@ const NotificationToast = () => {
     const [currentNotification, setCurrentNotification] = useState(null);
 
     /**
-     * Shows one queued notification at a time. Both timers are cleared on
-     * cleanup — the previous version left them running, so a notification
-     * arriving during a fade could dismiss the wrong entry after unmount.
+     * Shows one queued notification at a time.
+     *
+     * The effect keys on the notification's id, not on `visible`. Depending on
+     * `visible` made it destroy its own timer: setting visible=true re-ran the
+     * effect, cleanup cleared the pending hideTimer, and the guard then returned
+     * early without arming a new one — so the toast stayed on screen forever and
+     * every notification queued behind it was never shown.
      */
-    useEffect(() => {
-        const [next] = state.notifications;
-        if (visible || !next) return undefined;
+    const nextNotification = state.notifications[0] ?? null;
+    const activeId = currentNotification?.id ?? null;
 
-        setCurrentNotification(next);
+    useEffect(() => {
+        if (!nextNotification) return undefined;
+        // Already showing this one; its timers are running from the first pass.
+        if (activeId === nextNotification.id) return undefined;
+
+        setCurrentNotification(nextNotification);
         setVisible(true);
 
         let fadeTimer;
         const hideTimer = setTimeout(() => {
             setVisible(false);
             fadeTimer = setTimeout(
-                () => dispatch({ type: "DISMISS_NOTIFICATION", id: next.id }),
+                () => dispatch({ type: "DISMISS_NOTIFICATION", id: nextNotification.id }),
                 FADE_MS
             );
         }, DISPLAY_MS);
@@ -34,7 +42,7 @@ const NotificationToast = () => {
             clearTimeout(hideTimer);
             clearTimeout(fadeTimer);
         };
-    }, [state.notifications, visible, dispatch]);
+    }, [nextNotification, activeId, dispatch]);
 
     const dismissNow = () => {
         setVisible(false);

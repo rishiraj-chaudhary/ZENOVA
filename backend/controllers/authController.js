@@ -11,6 +11,7 @@ import {
   revokeToken,
   rotateRefreshToken,
 } from "../services/refreshTokenService.js";
+import { destroySessionsForUser } from "../services/sessionStoreService.js";
 import AppError from "../utils/AppError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import {
@@ -120,6 +121,13 @@ export const logout = asyncHandler(async (req, res) => {
 export const logoutAllDevices = asyncHandler(async (req, res) => {
   await revokeAllForUser(req.user._id);
   clearRefreshCookie(res);
+
+  // authMiddleware accepts an express session as credentials in its own right,
+  // so revoking refresh tokens alone left every other device fully signed in
+  // while the response claimed otherwise. The session store is Mongo-backed, so
+  // the other devices' sessions can actually be destroyed.
+  await destroySessionsForUser(req.user._id);
+  req.session?.destroy?.(() => {});
 
   res.json({ message: "Signed out on all devices" });
 });

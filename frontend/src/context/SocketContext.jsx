@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { io } from "socket.io-client";
+import { refreshSession } from "../api/client.js";
 import { SOCKET_URL } from "../config/api.js";
 import { getAccessToken } from "../utils/authStorage.js";
 import { useAuth } from "./AuthContext.jsx";
@@ -24,27 +25,62 @@ export const SocketProvider = ({ children }) => {
       return undefined;
     }
 
+    // Guards against a refresh storm if the token is genuinely dead.
+    let retriedAfterRefresh = false;
+    let disposed = false;
+
     const instance = io(SOCKET_URL, {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      // A function rather than a value, so reconnects pick up a rotated access
-      // token instead of replaying the one captured at mount.
-      auth: (callback) => callback({ token: getAccessToken() }),
+      /**
+       * Mints a token for every connection attempt.
+       *
+       * The access token expires after 15 minutes and the only thing that
+       * renewed it was an HTTP 401 on some unrelated REST call. So a tab open
+       * longer than that reconnected — after a wifi blip, a sleep/wake, a
+       * redeploy — with an expired token, the handshake was rejected, and
+       * socket.io does NOT retry a namespace middleware rejection: realtime was
+       * dead for the rest of the session with nothing on screen to say so.
+       */
+      auth: (callback) => {
+        const token = getAccessToken();
+        if (token) return callback({ token });
+
+        refreshSession()
+          .then((fresh) => callback({ token: fresh }))
+          .catch(() => callback({}));
+      },
     });
 
-    instance.on("connect", () => setConnected(true));
+    instance.on("connect", () => {
+      retriedAfterRefresh = false;
+      setConnected(true);
+    });
     instance.on("disconnect", () => setConnected(false));
 
-    instance.on("connect_error", (error) => {
-      // The server rejects unauthenticated handshakes outright.
+    instance.on("connect_error", async (error) => {
       logSocketError(error);
       setConnected(false);
+
+      if (error?.message !== "Authentication required" || retriedAfterRefresh) return;
+      retriedAfterRefresh = true;
+
+      // A middleware rejection stops socket.io's own retry loop for good
+      // (socket.active goes false), so reconnecting has to be done by hand
+      // after getting a fresh token.
+      try {
+        await refreshSession();
+        if (!disposed) instance.connect();
+      } catch {
+        // The session is genuinely over; AuthContext will drop to signed-out.
+      }
     });
 
     setSocket(instance);
 
     return () => {
+      disposed = true;
       instance.disconnect();
       setSocket(null);
       setConnected(false);

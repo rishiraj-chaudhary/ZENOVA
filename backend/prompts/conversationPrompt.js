@@ -6,8 +6,16 @@ export const buildConversationalPrompt = (
 ) => {
   const { name, preferences = [], moodHistory = [], sessionHistory = [] } = userProfile;
 
+  // moodHistory arrives newest-first (moodService sorts recordedAt: -1), so
+  // slice(-5) took the five OLDEST entries in the window and printed them
+  // backwards — the model was shown a stale trend running the wrong way, and
+  // told it was recent. Take the newest five, then reverse for chronology.
   const moodTrend =
-    moodHistory.slice(-5).map((entry) => entry.mood).join(" → ") || "First interaction";
+    moodHistory
+      .slice(0, 5)
+      .reverse()
+      .map((entry) => entry.mood)
+      .join(" → ") || "First interaction";
 
   const formattedHistory =
     conversationHistory

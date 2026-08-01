@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { POINTS } from "../../config/gamification.js";
 import Gamification from "../../models/Gamification.js";
 import Recommendation from "../../models/Recommendation.js";
+import User from "../../models/user.js";
 import SessionOutcome from "../../models/SessionOutcome.js";
 import {
   completeSession,
@@ -12,6 +13,22 @@ import {
 import { clearTestDb, connectTestDb, disconnectTestDb } from "../helpers/db.js";
 
 const newId = () => new mongoose.Types.ObjectId();
+
+/**
+ * A real user who has consented to mood tracking. Sessions record self-reported
+ * mood, so the write is gated on consent — a bare ObjectId is not enough.
+ */
+let userCounter = 0;
+const consentingUser = async () => {
+  userCounter += 1;
+  const user = await User.create({
+    name: `session-${userCounter}`,
+    email: `session-${userCounter}-${Date.now()}@example.com`,
+    password: "hunter2secure",
+    consent: { moodTracking: true, grantedAt: new Date() },
+  });
+  return user._id;
+};
 
 /** A recommendation to hang a session off, as the real flow produces. */
 const openSession = async (userId) => {
@@ -39,7 +56,7 @@ afterAll(disconnectTestDb);
 
 describe("rewarding a listening session", () => {
   it("pays for listening even when the after-rating never comes", async () => {
-    const userId = newId();
+    const userId = await consentingUser();
     const sessionId = await openSession(userId);
 
     // THERAPY_SESSION_COMPLETED existed in the reward table but nothing
@@ -51,7 +68,7 @@ describe("rewarding a listening session", () => {
   });
 
   it("pays once however many tracks are played", async () => {
-    const userId = newId();
+    const userId = await consentingUser();
     const sessionId = await openSession(userId);
 
     await markSessionListened({ userId, sessionId, socketManager: null });
@@ -62,7 +79,7 @@ describe("rewarding a listening session", () => {
   });
 
   it("pays the measurement bonus on top when the session is rated", async () => {
-    const userId = newId();
+    const userId = await consentingUser();
     const sessionId = await openSession(userId);
 
     await markSessionListened({ userId, sessionId, socketManager: null });
@@ -76,7 +93,7 @@ describe("rewarding a listening session", () => {
   });
 
   it("counts listening and measuring separately", async () => {
-    const userId = newId();
+    const userId = await consentingUser();
     const sessionId = await openSession(userId);
 
     await markSessionListened({ userId, sessionId, socketManager: null });
@@ -88,7 +105,7 @@ describe("rewarding a listening session", () => {
   });
 
   it("records nothing for a session that was never started", async () => {
-    const userId = newId();
+    const userId = await consentingUser();
 
     const result = await markSessionListened({
       userId,
@@ -101,8 +118,8 @@ describe("rewarding a listening session", () => {
   });
 
   it("records nothing when another user claims the session", async () => {
-    const owner = newId();
-    const stranger = newId();
+    const owner = await consentingUser();
+    const stranger = await consentingUser();
     const sessionId = await openSession(owner);
 
     const result = await markSessionListened({
@@ -116,7 +133,7 @@ describe("rewarding a listening session", () => {
   });
 
   it("pays once when several tracks start at the same moment", async () => {
-    const userId = newId();
+    const userId = await consentingUser();
     const sessionId = await openSession(userId);
 
     await Promise.all(

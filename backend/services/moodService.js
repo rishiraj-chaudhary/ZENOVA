@@ -1,17 +1,13 @@
 import MoodEntry from "../models/MoodEntry.js";
 import User from "../models/user.js";
 import logger from "../utils/logger.js";
+import { hasMoodConsent } from "./consentService.js";
 
 const DEFAULT_HISTORY_LIMIT = 50;
 const MAX_CONTEXT_LENGTH = 200;
 
 const truncate = (text = "", maxLength = MAX_CONTEXT_LENGTH) =>
   text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
-
-const hasMoodConsent = async (userId) => {
-  const user = await User.findById(userId).select("consent").lean();
-  return Boolean(user?.consent?.moodTracking);
-};
 
 /**
  * Records a mood observation, if the user has consented to mood tracking.

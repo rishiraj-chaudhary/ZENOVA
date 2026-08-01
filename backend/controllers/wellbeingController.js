@@ -14,6 +14,7 @@ import { checkAndAwardBadges } from "../services/badgeService.js";
 import { awardPoints } from "../services/pointsService.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import resolveRegion from "../utils/resolveRegion.js";
+import AppError from "../utils/AppError.js";
 
 export const logMood = asyncHandler(async (req, res) => {
   const { mood, intensity, context } = req.body;
@@ -26,12 +27,19 @@ export const logMood = asyncHandler(async (req, res) => {
     source: "check-in",
   });
 
+  // recordMood returns null when consent is absent. Reporting 201 with a null
+  // body told the client the check-in had been saved when nothing was written,
+  // so the UI showed a success state for a silent no-op.
+  if (!entry) {
+    throw AppError.forbidden(
+      "Mood tracking consent is required to save a check-in"
+    );
+  }
+
   // Once per calendar day via the default entity key. Check-ins are what fill
   // the mood history the insights are drawn from.
-  if (entry) {
-    await awardPoints(req.user._id, "DAILY_CHECK_IN", req.socketManager);
-    await checkAndAwardBadges(req.user._id, req.socketManager);
-  }
+  await awardPoints(req.user._id, "DAILY_CHECK_IN", req.socketManager);
+  await checkAndAwardBadges(req.user._id, req.socketManager);
 
   res.status(201).json(entry);
 });
