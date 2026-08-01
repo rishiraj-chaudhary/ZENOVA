@@ -6,7 +6,7 @@ import { buildRecommendationPrompt } from "../prompts/recommendationPrompt.js";
 import parseRequestedSongCount from "../utils/parseRequestedSongCount.js";
 import { generateJson, generateText } from "./geminiService.js";
 import { RECOMMENDATION_SCHEMA } from "./schemas.js";
-import { recordMood } from "./moodService.js";
+import { getLatestSelfRating, recordMood } from "./moodService.js";
 import {
   ELEVATED_RISK_PROMPT_GUIDANCE,
   RISK_LEVELS,
@@ -14,6 +14,7 @@ import {
   buildCrisisResponse,
 } from "./safetyService.js";
 import { findTrack } from "./spotifyService.js";
+import { rankByMeasuredEffect } from "./songEffectService.js";
 import { buildTasteProfile, getSkippedSongTitles } from "./tasteService.js";
 import { loadTherapyProfile } from "./userProfileService.js";
 import logger from "../utils/logger.js";
@@ -32,14 +33,46 @@ const buildYouTubeSearchUrl = (title, artist) => {
  * the prompt read `likes`/`skips` from a field nothing ever wrote, so every
  * request looked identical regardless of how much the user had told us.
  */
-const loadPersonalizationContext = async (userId) => {
-  const [profile, taste, avoidSongs] = await Promise.all([
+const loadPersonalizationContext = async (userId, startingMood) => {
+  const [profile, taste, avoidSongs, provenSongs] = await Promise.all([
     loadTherapyProfile(userId),
     buildTasteProfile(userId),
     getSkippedSongTitles(userId),
+    loadProvenSongs(startingMood),
   ]);
 
-  return { ...profile, taste, avoidSongs };
+  return { ...profile, taste, avoidSongs, provenSongs };
+};
+
+/**
+ * Songs with a measured positive effect for people who started in this state.
+ *
+ * Empty until the ledger has evidence, which is the intended behaviour: the
+ * product should recommend from measurement where it has it and fall back to
+ * the model where it does not, rather than claiming an effect it cannot show.
+ */
+const loadProvenSongs = async (startingMood) => {
+  if (!startingMood) return [];
+
+  try {
+    const ranked = await rankByMeasuredEffect(startingMood, { limit: 8 });
+    if (ranked.length === 0) return [];
+
+    const songs = await MusicResource.find({
+      _id: { $in: ranked.map((entry) => entry.musicId) },
+    })
+      .select("title artist")
+      .lean();
+
+    const byId = new Map(songs.map((song) => [song._id.toString(), song]));
+
+    return ranked
+      .map((entry) => ({ ...entry, ...byId.get(entry.musicId.toString()) }))
+      .filter((entry) => entry.title);
+  } catch (error) {
+    logger.warn("could not load measured effects", { detail: error.message });
+    return [];
+  }
 };
 
 /**
@@ -160,7 +193,8 @@ export const generateRecommendations = async ({
     return buildCrisisResponse(risk);
   }
 
-  const userProfile = await loadPersonalizationContext(userId);
+  const startingMood = await getLatestSelfRating(userId);
+  const userProfile = await loadPersonalizationContext(userId, startingMood);
   const requestedCount = parseRequestedSongCount(message);
 
   const currentMood = await detectMood(message, conversationHistory, userProfile);

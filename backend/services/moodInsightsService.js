@@ -15,7 +15,12 @@ const MIN_ENTRIES_FOR_INSIGHT = 5;
  * word we have not classified never silently skews the average.
  */
 const MOOD_VALENCE = {
-  great: 2, joyful: 2, excited: 2, energetic: 2, accomplished: 2, grateful: 2,
+  // The five daily check-in labels come first because they are the highest
+  // volume input by far. Four of them were missing, so every check-in except
+  // "great" scored 0 and the chart was flat for anyone using the feature.
+  awful: -2, low: -1, okay: 0, good: 1, great: 2,
+
+  joyful: 2, excited: 2, energetic: 2, accomplished: 2, grateful: 2,
   happy: 2, motivated: 2, hopeful: 1, calm: 1, peaceful: 1, content: 1,
   relaxed: 1, focused: 1, reflective: 0, neutral: 0, contemplative: 0,
   nostalgic: 0, bored: -1, tired: -1, restless: -1, frustrated: -1,

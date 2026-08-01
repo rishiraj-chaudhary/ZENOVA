@@ -42,6 +42,23 @@ export const recordMood = async ({ userId, mood, context, source, intensity }) =
   }
 };
 
+/**
+ * The user's most recent explicit 1–5 rating, or null.
+ *
+ * Only self-reported intensities count. A mood word inferred by the model is
+ * not a measurement, and the ledger is keyed on measurements.
+ */
+export const getLatestSelfRating = async (userId) => {
+  if (!userId) return null;
+
+  const entry = await MoodEntry.findOne({ userId, intensity: { $ne: null } })
+    .sort({ recordedAt: -1 })
+    .select("intensity")
+    .lean();
+
+  return entry?.intensity ?? null;
+};
+
 export const getRecentMoods = (userId, limit = DEFAULT_HISTORY_LIMIT) =>
   MoodEntry.find({ userId }).sort({ recordedAt: -1 }).limit(limit).lean();
 

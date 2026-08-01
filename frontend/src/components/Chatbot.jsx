@@ -37,6 +37,8 @@ function Chatbot() {
   const [support, setSupport] = useState(null);
   const [sessionId, setSessionId] = useState(null);
   const [checkInPhase, setCheckInPhase] = useState(null);
+  // The after-rating is only meaningful once something was actually heard.
+  const [hasListened, setHasListened] = useState(false);
 
   const [playlists, setPlaylists] = useState([]);
   const [pendingSong, setPendingSong] = useState(null);
@@ -89,6 +91,7 @@ function Chatbot() {
         setRecommendations(result.recommendations);
         setSessionId(result.sessionId ?? null);
         setCheckInPhase(result.sessionId ? "before" : null);
+        setHasListened(false);
       }
       if (result.detectedMood) setMood(result.detectedMood);
     } catch (error) {
@@ -164,6 +167,27 @@ function Chatbot() {
     }
   };
 
+  /**
+   * Playing a track is what makes the after-rating worth asking for.
+   *
+   * The prompt was previously unreachable: answering the before-rating set the
+   * phase to null on both branches, so it never returned and every
+   * SessionOutcome.moodAfter stayed null — the measurement the product depends
+   * on was never collected.
+   */
+  const startTrack = (index) => {
+    setCurrentPlayingIndex(index);
+    setHasListened(true);
+  };
+
+  const completeBeforeRating = () => setCheckInPhase("listening");
+
+  const completeAfterRating = () => {
+    setCheckInPhase(null);
+    setSessionId(null);
+    setHasListened(false);
+  };
+
   const shuffle = () =>
     setRecommendations((current) =>
       [...current].sort(() => Math.random() - 0.5)
@@ -213,10 +237,10 @@ function Chatbot() {
                 onSaveAll={() => openPlaylistPicker(SAVE_ALL)}
                 onAddToPlaylist={openPlaylistPicker}
                 onTrackEnded={advanceTrack}
-                onPlay={setCurrentPlayingIndex}
-                onCheckInDone={() =>
-                  setCheckInPhase((phase) => (phase === "before" ? null : null))
-                }
+                onPlay={startTrack}
+                hasListened={hasListened}
+                onBeforeRated={completeBeforeRating}
+                onAfterRated={completeAfterRating}
               />
             </ErrorBoundary>
           </div>

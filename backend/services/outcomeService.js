@@ -1,6 +1,7 @@
 import Recommendation from "../models/Recommendation.js";
 import SessionOutcome from "../models/SessionOutcome.js";
 import AppError from "../utils/AppError.js";
+import { recordSessionEffect } from "./songEffectService.js";
 
 /**
  * Opens an outcome record when a listening session starts.
@@ -29,7 +30,12 @@ export const startSession = async ({ userId, sessionId, moodBefore }) => {
   );
 };
 
-/** Closes the loop: the single measurement that says whether this worked. */
+/**
+ * Closes the loop: the single measurement that says whether this worked.
+ *
+ * Completing a session is also the only event that writes to the song-effect
+ * ledger, which is what turns an individual rating into ranking evidence.
+ */
 export const completeSession = async ({ userId, sessionId, moodAfter }) => {
   const outcome = await SessionOutcome.findOneAndUpdate(
     { sessionId, userId },
@@ -38,6 +44,12 @@ export const completeSession = async ({ userId, sessionId, moodAfter }) => {
   );
 
   if (!outcome) throw AppError.notFound("Session not started");
+
+  await recordSessionEffect({
+    songIds: outcome.songsPlayed,
+    moodBefore: outcome.moodBefore,
+    moodAfter,
+  });
 
   return outcome;
 };

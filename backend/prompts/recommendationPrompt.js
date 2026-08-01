@@ -37,6 +37,7 @@ export const buildRecommendationPrompt = ({
     moodHistory = [],
     taste = {},
     avoidSongs = [],
+    provenSongs = [],
   } = userProfile;
 
   const { likedGenres = [], skippedGenres = [], totalSignals = 0 } = taste;
@@ -51,6 +52,21 @@ export const buildRecommendationPrompt = ({
 - Genres they tend to skip: ${listOrDefault(skippedGenres, "none noted")}
 - Signals collected so far: ${totalSignals}`
     : "- Taste signals: none yet — this user has not rated any songs, so rely on their stated preferences and current message";
+
+  // The one input here that is measured rather than asserted. Placed near the
+  // request so it carries weight, and stated as evidence with its sample size
+  // so the model is not asked to trust a mean drawn from four observations.
+  const measuredSection = provenSongs?.length
+    ? `\nMEASURED TO HELP PEOPLE IN THIS STATE — prefer these unless the request
+rules them out. These are not guesses; each is a recorded average change in
+self-reported mood after listening:
+${provenSongs
+  .map(
+    (song) =>
+      `- ${song.title} — ${song.artist} (avg ${song.meanDelta > 0 ? "+" : ""}${song.meanDelta.toFixed(1)} across ${song.observations} sessions, ${song.evidence})`
+  )
+  .join("\n")}`
+    : "";
 
   const avoidSection = avoidSongs.length
     ? `\nDO NOT RECOMMEND these songs — the user has already skipped them:\n${avoidSongs
@@ -67,6 +83,7 @@ USER PROFILE ANALYSIS:
 - Stated preferences: ${listOrDefault(preferences, "None specified")}
 ${tasteSection}
 - Recent mood pattern: ${recentMoodPattern}
+${measuredSection}
 ${avoidSection}
 
 CONVERSATION CONTEXT:

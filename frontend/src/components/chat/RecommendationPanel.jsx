@@ -17,7 +17,9 @@ const RecommendationPanel = ({
   onAddToPlaylist,
   onTrackEnded,
   onPlay,
-  onCheckInDone,
+  hasListened,
+  onBeforeRated,
+  onAfterRated,
 }) => (
   <aside className="flex h-full flex-col border-l border-white/10 bg-white/5">
     <div className="flex items-center justify-between border-b border-white/10 p-4">
@@ -53,12 +55,12 @@ const RecommendationPanel = ({
     </div>
 
     <div className="flex-grow space-y-4 overflow-y-auto p-4">
-      {sessionId && checkInPhase && (
+      {sessionId && checkInPhase === "before" && (
         <SessionCheckIn
           sessionId={sessionId}
-          phase={checkInPhase}
-          onComplete={onCheckInDone}
-          onSkip={onCheckInDone}
+          phase="before"
+          onComplete={onBeforeRated}
+          onSkip={onBeforeRated}
         />
       )}
 
@@ -70,6 +72,17 @@ const RecommendationPanel = ({
         <i className="fa-solid fa-bookmark mr-2" aria-hidden="true" />
         Save all {recommendations.length} to a playlist
       </button>
+
+      {/* Asked only once a track has been played, so the rating reflects
+          something actually heard rather than a screen that was looked at. */}
+      {sessionId && checkInPhase === "listening" && hasListened && (
+        <SessionCheckIn
+          sessionId={sessionId}
+          phase="after"
+          onComplete={onAfterRated}
+          onSkip={onAfterRated}
+        />
+      )}
 
       {recommendations.map((song, index) => (
         <RecommendationCard
