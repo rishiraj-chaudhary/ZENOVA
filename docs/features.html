@@ -1,0 +1,945 @@
+<title>ZENOVA — Feature & Implementation Reference</title>
+
+<style>
+  :root {
+    --paper:   #eef0ec;
+    --surface: #fafbf8;
+    --ink:     #191d25;
+    --muted:   #5e6672;
+    --rule:    #d6d9d1;
+    --before:  #50648c;
+    --after:   #b0701f;
+
+    --measure: 68ch;
+    --gutter: 13.5rem;
+
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper:   #11141a;
+      --surface: #181c24;
+      --ink:     #e5e8ea;
+      --muted:   #949cA8;
+      --rule:    #292e38;
+      --before:  #8ba1c9;
+      --after:   #d99a4c;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper:   #11141a;
+    --surface: #181c24;
+    --ink:     #e5e8ea;
+    --muted:   #949ca8;
+    --rule:    #292e38;
+    --before:  #8ba1c9;
+    --after:   #d99a4c;
+  }
+
+  :root[data-theme="light"] {
+    --paper:   #eef0ec;
+    --surface: #fafbf8;
+    --ink:     #191d25;
+    --muted:   #5e6672;
+    --rule:    #d6d9d1;
+    --before:  #50648c;
+    --after:   #b0701f;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 74rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 5vw, 4.5rem) clamp(1.1rem, 4vw, 3rem) 6rem;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead { border-bottom: 2px solid var(--ink); padding-bottom: 2rem; }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 1.25rem;
+  }
+
+  h1 {
+    font-size: clamp(2.6rem, 7vw, 4.5rem);
+    line-height: 0.95;
+    letter-spacing: -0.035em;
+    font-weight: 800;
+    margin: 0 0 1rem;
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    font-size: clamp(1.05rem, 2vw, 1.3rem);
+    line-height: 1.45;
+    color: var(--muted);
+    max-width: 46ch;
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 2.5rem;
+    margin-top: 2.25rem;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .facts div { display: flex; flex-direction: column; gap: 0.2rem; }
+  .facts b { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.02em; }
+  .facts span { color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-size: 0.66rem; }
+
+  /* ---------- the thesis diagram ---------- */
+
+  .thesis {
+    margin: 3rem 0 0;
+    padding: 1.75rem;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+  }
+  .thesis p {
+    margin: 1.25rem 0 0;
+    max-width: var(--measure);
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  .thesis p b { color: var(--ink); font-weight: 600; }
+
+  .loop { width: 100%; height: auto; display: block; overflow: visible; }
+  .loop text {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    fill: var(--muted);
+    text-transform: uppercase;
+  }
+  .loop text.val { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+
+  /* ---------- domain sections ---------- */
+
+  .domain { margin-top: 4.5rem; }
+
+  .domain-head {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    border-bottom: 1px solid var(--ink);
+    padding-bottom: 0.6rem;
+    margin-bottom: 0.5rem;
+  }
+  .domain-head h2 {
+    font-size: clamp(1.3rem, 2.6vw, 1.75rem);
+    letter-spacing: -0.02em;
+    font-weight: 750;
+    margin: 0;
+  }
+  .domain-head .count {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    color: var(--muted);
+    margin-left: auto;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
+
+  /* ---------- one feature ---------- */
+
+  .feature {
+    display: grid;
+    grid-template-columns: var(--gutter) minmax(0, 1fr);
+    gap: 0 2.5rem;
+    padding: 1.6rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .meta { font-family: var(--mono); font-size: 0.7rem; line-height: 1.65; color: var(--muted); }
+  .meta .path { display: block; word-break: break-word; }
+  .meta .route {
+    display: block;
+    color: var(--ink);
+    margin-bottom: 0.45rem;
+    font-weight: 600;
+    word-break: break-word;
+  }
+
+  .body h3 {
+    font-size: 1.02rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.4rem;
+  }
+  .body p { margin: 0 0 0.7rem; max-width: var(--measure); color: var(--muted); font-size: 0.94rem; }
+  .body p:last-child { margin-bottom: 0; }
+  .body strong { color: var(--ink); font-weight: 600; }
+
+  .stack { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.75rem; }
+  .stack span {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.04em;
+    padding: 0.16rem 0.45rem;
+    border: 1px solid var(--rule);
+    color: var(--muted);
+    background: var(--surface);
+    white-space: nowrap;
+  }
+
+  .flag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.1rem 0.4rem;
+    margin-left: 0.5rem;
+    vertical-align: 0.14em;
+    border: 1px solid var(--after);
+    color: var(--after);
+    white-space: nowrap;
+  }
+
+  /* ---------- closing ---------- */
+
+  .colophon {
+    margin-top: 4.5rem;
+    padding-top: 1.75rem;
+    border-top: 2px solid var(--ink);
+  }
+  .colophon h2 { font-size: 1.2rem; margin: 0 0 1rem; letter-spacing: -0.02em; }
+  .colophon p { color: var(--muted); max-width: var(--measure); font-size: 0.94rem; margin: 0 0 0.7rem; }
+
+  .table-scroll { overflow-x: auto; margin-top: 1.25rem; }
+  table { border-collapse: collapse; font-size: 0.85rem; min-width: 34rem; width: 100%; }
+  th, td { text-align: left; padding: 0.5rem 1.25rem 0.5rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  td:first-child { font-family: var(--mono); font-size: 0.78rem; white-space: nowrap; }
+  td { color: var(--muted); }
+
+  @media (max-width: 720px) {
+    .feature { grid-template-columns: 1fr; gap: 0.6rem; }
+    .meta { order: 2; padding-top: 0.3rem; }
+    .body { order: 1; }
+    .facts { gap: 0 1.5rem; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">Feature &amp; implementation reference · MERN + Gemini</p>
+    <h1>ZENOVA</h1>
+    <p class="standfirst">
+      A music-wellbeing app that does something most recommenders don't: it asks how you
+      felt before, asks again after, and ranks songs by the difference.
+    </p>
+
+    <div class="facts">
+      <div><b>48</b><span>HTTP endpoints</span></div>
+      <div><b>16</b><span>Mongo collections</span></div>
+      <div><b>29</b><span>Backend services</span></div>
+      <div><b>9</b><span>React pages</span></div>
+      <div><b>282</b><span>Automated tests</span></div>
+      <div><b>18.6k</b><span>Lines of code</span></div>
+    </div>
+  </header>
+
+  <section class="thesis">
+    <svg class="loop" viewBox="0 0 640 108" role="img"
+         aria-label="A session: mood rated 2 before listening, 4 after, contributing a delta of plus 2 to the song-effect ledger.">
+      <!-- baseline -->
+      <line x1="8" y1="70" x2="632" y2="70" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+
+      <!-- before -->
+      <circle cx="70" cy="70" r="6" fill="var(--before)"/>
+      <text class="val" x="70" y="52" text-anchor="middle" fill="var(--before)">2</text>
+      <text x="70" y="90" text-anchor="middle">mood before</text>
+
+      <!-- listen -->
+      <line x1="82" y1="70" x2="290" y2="70" stroke="var(--before)" stroke-width="1.5" stroke-dasharray="3 4"/>
+      <text x="186" y="59" text-anchor="middle">listening session</text>
+
+      <!-- after -->
+      <circle cx="302" cy="70" r="6" fill="var(--after)"/>
+      <text class="val" x="302" y="52" text-anchor="middle" fill="var(--after)">4</text>
+      <text x="302" y="90" text-anchor="middle">mood after</text>
+
+      <!-- delta -->
+      <line x1="314" y1="70" x2="470" y2="70" stroke="var(--after)" stroke-width="1.5"/>
+      <path d="M470 70 l-7 -4 v8 z" fill="var(--after)"/>
+      <text class="val" x="392" y="59" text-anchor="middle" fill="var(--after)">Δ +2</text>
+
+      <!-- ledger -->
+      <rect x="482" y="56" width="150" height="28" fill="none" stroke="currentColor" stroke-opacity="0.35"/>
+      <text x="557" y="74" text-anchor="middle">song-effect ledger</text>
+    </svg>
+
+    <p>
+      Everything else in the system records what was <em>recommended</em>. This records what
+      <b>changed</b> — and it is the only part that can't be copied from another music app,
+      because it needs the user to answer twice. Every completed session writes a
+      <b>(song, starting mood) → delta</b> observation, and recommendations are ranked from
+      that ledger rather than from popularity.
+    </p>
+  </section>
+
+  <!-- ============ ACCOUNTS ============ -->
+  <section class="domain">
+    <div class="domain-head">
+      <h2>Accounts &amp; sessions</h2>
+      <span class="count">6 endpoints</span>
+    </div>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">POST /api/auth/register · /login</span>
+        <span class="path">services/authService.js</span>
+        <span class="path">utils/passwordUtils.js</span>
+      </div>
+      <div class="body">
+        <h3>Email &amp; password sign-in</h3>
+        <p>
+          Passwords are hashed with <strong>bcrypt</strong>. The hash is <code>select: false</code>
+          on the schema, so no query can leak it by accident — the auth service opts in explicitly.
+          Unknown email and wrong password return the same message, so the response can't be used
+          to enumerate who has an account.
+        </p>
+        <div class="stack"><span>bcryptjs</span><span>Mongoose</span><span>express-validator</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">POST /api/auth/refresh · /logout · /logout-all</span>
+        <span class="path">services/refreshTokenService.js</span>
+        <span class="path">services/authSessionService.js</span>
+      </div>
+      <div class="body">
+        <h3>Two-token session with rotation</h3>
+        <p>
+          A short-lived <strong>JWT access token</strong> (15 minutes) is held in memory only —
+          never in storage — so an XSS window is bounded. A 30-day <strong>refresh token</strong>
+          lives in an httpOnly cookie and is single-use: presenting one atomically revokes it and
+          issues a replacement.
+        </p>
+        <p>
+          Presenting an <em>already-revoked</em> token means it was stolen and replayed, so the
+          entire token family for that user is revoked. Rotation is a single conditional
+          <code>findOneAndUpdate</code>, so two concurrent refreshes can't both succeed.
+        </p>
+        <div class="stack"><span>jsonwebtoken</span><span>httpOnly cookie</span><span>SameSite=None; Secure</span><span>SHA-256 token hashes</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">GET /api/music/recommend/spotify/auth</span>
+        <span class="path">controllers/musicController.js</span>
+        <span class="path">services/spotifyService.js</span>
+      </div>
+      <div class="body">
+        <h3>Sign in with Spotify</h3>
+        <p>
+          Full <strong>OAuth 2.0 authorization-code flow</strong>. The callback reads the Spotify
+          profile, finds or creates a ZENOVA account, and issues the same session the password path
+          does. An <code>intent</code> stored server-side in the session — not in the query string —
+          decides whether the callback signs you in or attaches Spotify to the account you're
+          already in.
+        </p>
+        <p>
+          Accounts match on the <strong>Spotify user id</strong>, never on email alone. ZENOVA
+          doesn't verify addresses at registration, so auto-linking by email would let someone
+          register with your address and wait for you to sign in with Spotify.
+        </p>
+        <div class="stack"><span>OAuth 2.0</span><span>CSRF state (fail-closed)</span><span>spotify-web-api-node</span></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ AI ============ -->
+  <section class="domain">
+    <div class="domain-head">
+      <h2>Conversational AI</h2>
+      <span class="count">Gemini 3.5 Flash</span>
+    </div>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">POST /api/gemini/chat · /analyze-mood</span>
+        <span class="path">services/geminiService.js</span>
+        <span class="path">prompts/conversationPrompt.js</span>
+      </div>
+      <div class="body">
+        <h3>Therapeutic chat &amp; mood detection</h3>
+        <p>
+          Google's <strong>Generative AI SDK</strong> with <code>responseSchema</code> structured
+          output, so the model returns typed JSON rather than prose that has to be scraped. The
+          prompt carries the user's name, stated preferences, recent mood trend and session count.
+        </p>
+        <p>
+          Calls run through a <strong>failover chain</strong>: retry with exponential backoff on
+          429/5xx, move to the next model on anything non-retryable, and cool a failed model down
+          for 60 seconds so the next request skips it.
+        </p>
+        <div class="stack"><span>@google/generative-ai</span><span>structured output</span><span>model failover</span><span>token metrics</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="path">utils/untrustedContent.js</span>
+      </div>
+      <div class="body">
+        <h3>Prompt-injection boundary</h3>
+        <p>
+          Anything the user controls — the message <em>and</em> the conversation history the browser
+          posts back each turn — is wrapped in a <strong>per-process random delimiter</strong>,
+          with delimiter-lookalikes stripped from the content and an explicit instruction that the
+          enclosed region is data, never instructions.
+        </p>
+        <p>
+          Three layers because none alone is sufficient. It matters most for the crisis classifier,
+          whose entire prompt <em>is</em> the user's message.
+        </p>
+        <div class="stack"><span>crypto.randomBytes</span><span>content sanitisation</span></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ SAFETY ============ -->
+  <section class="domain">
+    <div class="domain-head">
+      <h2>Crisis safety</h2>
+      <span class="count">53 patterns · gated eval</span>
+    </div>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">GET /api/wellbeing/support <em>(public)</em></span>
+        <span class="path">services/safetyService.js</span>
+        <span class="path">utils/resolveRegion.js</span>
+      </div>
+      <div class="body">
+        <h3>Layered risk detection<span class="flag">safety-critical</span></h3>
+        <p>
+          Two detectors with different jobs. A <strong>deterministic regex layer</strong> gives
+          precision and can't be talked out of a decision — it covers euphemisms like
+          <code>kys</code>, <code>unalive</code> and <code>kms</code>, with a lookbehind so
+          "I ran 5 kms" doesn't trip it. An <strong>LLM classifier</strong> then catches the
+          phrasings no pattern anticipated.
+        </p>
+        <p>
+          At crisis level the music path is never reached: the response is helplines and an
+          emergency notice, with <strong>region-aware</strong> numbers resolved from the request.
+          Support contacts are the one public endpoint — you shouldn't need an account to reach
+          them. If the classifier fails, the response is marked <code>degraded</code> rather than
+          silently returning "no risk".
+        </p>
+        <div class="stack"><span>regex + LLM ensemble</span><span>region routing</span><span>degraded-state observability</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="path">evals/runSafetyEval.js</span>
+        <span class="path">evals/datasets/</span>
+      </div>
+      <div class="body">
+        <h3>Eval harness with recall gating</h3>
+        <p>
+          A labelled dataset run against the live classifier, gated on <strong>crisis recall</strong>
+          — a missed crisis fails the run outright, where a false positive only costs precision.
+          It also fails if more than 15% of classifications came back degraded, because a
+          rate-limited classifier that silently returns "none" would otherwise score 100%.
+        </p>
+        <div class="stack"><span>Node runner</span><span>concurrency + pacing</span><span>failure-rate gate</span></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ RECOMMENDATION ============ -->
+  <section class="domain">
+    <div class="domain-head">
+      <h2>Music recommendation</h2>
+      <span class="count">5 endpoints</span>
+    </div>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">POST /api/music/recommend/recommendations</span>
+        <span class="path">services/recommendationService.js</span>
+        <span class="path">utils/parseRequestedSongCount.js</span>
+      </div>
+      <div class="body">
+        <h3>Mood-to-music pipeline</h3>
+        <p>
+          Risk is assessed first, then Gemini proposes candidates with a therapeutic goal and a
+          per-song reason. Each is resolved against the <strong>Spotify catalogue</strong> through
+          progressively looser queries (exact <code>track:/artist:</code> first) and persisted as a
+          reusable <code>MusicResource</code>.
+        </p>
+        <p>
+          A natural-language parser reads how many songs you asked for — "give me 3 calming songs"
+          — through intervening adjectives, with word-boundary matching so "Germany" isn't read as
+          "many". If generation fails, a curated set is served and the response says so, so the
+          client never passes stand-ins off as personalised picks.
+        </p>
+        <div class="stack"><span>Gemini</span><span>Spotify Search API</span><span>client-credentials token cache</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="path">services/previewService.js</span>
+        <span class="path">components/YouTubeFallback.jsx</span>
+      </div>
+      <div class="body">
+        <h3>Playback with real fallbacks</h3>
+        <p>
+          Spotify Premium is required for full playback and roughly a third of the catalogue has no
+          Spotify match at all, so there are three tiers: the <strong>Web Playback SDK</strong> for
+          Premium, a <strong>30-second preview</strong> played inline, and a YouTube link.
+        </p>
+        <p>
+          Spotify stopped publishing preview URLs, so previews are resolved from the
+          <strong>iTunes Search API</strong> — free and unauthenticated. Both title and artist must
+          match, because a title-only match returns a preview of a different song, which is worse
+          than none.
+        </p>
+        <div class="stack"><span>Spotify Web Playback SDK</span><span>iTunes Search API</span><span>in-process LRU cache</span></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ MEASUREMENT ============ -->
+  <section class="domain">
+    <div class="domain-head">
+      <h2>Measured outcomes</h2>
+      <span class="count">the differentiator</span>
+    </div>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">POST /api/wellbeing/sessions/start</span>
+        <span class="route">· /listened · /complete</span>
+        <span class="path">services/outcomeService.js</span>
+      </div>
+      <div class="body">
+        <h3>Before / after session loop</h3>
+        <p>
+          Rate your mood 1–5 before listening, and again afterwards. The pair is stored as a
+          <code>SessionOutcome</code> with a computed delta. Listening and measuring are recorded
+          separately — you can finish a session without answering the follow-up, and that still
+          counts as real use, just not as evidence.
+        </p>
+        <p>
+          Both writes are gated on explicit mood-tracking consent, enforced at the write rather
+          than in the UI.
+        </p>
+        <div class="stack"><span>Mongoose virtuals</span><span>conditional updates</span><span>consent gate</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="path">services/songEffectService.js</span>
+        <span class="path">models/SongEffect.js</span>
+      </div>
+      <div class="body">
+        <h3>Effect ledger &amp; shrinkage ranking<span class="flag">novel</span></h3>
+        <p>
+          Each completed session updates running <strong>sufficient statistics</strong> per
+          <code>(song, starting mood)</code> cell — observation count, sum of deltas, sum of
+          squares — via atomic <code>$inc</code>, so concurrent sessions can't lose an update.
+        </p>
+        <p>
+          Ranking uses a <strong>shrinkage estimator</strong> with a Bayesian zero-effect prior:
+          <code>sumDelta / (n + prior)</code>. This is the whole point — five identical +3 ratings
+          have zero variance, so a naive confidence bound collapses to nothing and thin evidence
+          outranks strong. Shrinkage pulls small samples toward "no effect" until they earn their
+          place. Below 20 observations a song is labelled provisional rather than asserted.
+        </p>
+        <div class="stack"><span>atomic $inc</span><span>Bayesian shrinkage</span><span>Welford-style statistics</span></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ WELLBEING ============ -->
+  <section class="domain">
+    <div class="domain-head">
+      <h2>Mood tracking &amp; insights</h2>
+      <span class="count">9 endpoints</span>
+    </div>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">POST · GET /api/wellbeing/moods</span>
+        <span class="path">services/moodService.js</span>
+        <span class="path">services/consentService.js</span>
+      </div>
+      <div class="body">
+        <h3>Daily check-in, consent-gated</h3>
+        <p>
+          Mood is special-category health data under <strong>GDPR Art. 9</strong> and India's
+          <strong>DPDP Act</strong>, so consent defaults to off and is checked inside every write
+          path — self-reported ratings and AI-inferred moods alike. A check-in without consent is
+          refused with a clear message rather than reported as saved.
+        </p>
+        <div class="stack"><span>GDPR Art. 9</span><span>DPDP</span><span>write-level enforcement</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">GET /api/wellbeing/insights</span>
+        <span class="path">services/moodInsightsService.js</span>
+        <span class="path">components/MoodChart.jsx</span>
+      </div>
+      <div class="body">
+        <h3>Personal insights dashboard</h3>
+        <p>
+          Aggregates a rolling window into a daily valence series, the most frequent moods, the
+          hardest day of the week, the roughest time of day, and a direction. The trend compares
+          the first and second half of the window — a simple split is more honest than a regression
+          line over sparse, irregular self-reports.
+        </p>
+        <p>
+          When there are too few entries to compare halves it returns <code>unknown</code>, and the
+          UI says so rather than asserting "holding steady". The chart is hand-drawn
+          <strong>SVG</strong> — no chart library — so bundle size stays small and the axes mean
+          what the data means.
+        </p>
+        <div class="stack"><span>MongoDB aggregation</span><span>hand-rolled SVG</span><span>local-day bucketing</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">POST · DELETE /api/wellbeing/feedback</span>
+        <span class="path">services/tasteService.js</span>
+      </div>
+      <div class="body">
+        <h3>Song feedback &amp; taste profile</h3>
+        <p>
+          Like / dislike / save signals per song, aggregated into preferred genres that feed back
+          into the recommendation prompt. Feedback carries the mood you were in at the time, so a
+          preference is contextual rather than absolute.
+        </p>
+        <div class="stack"><span>aggregation pipeline</span><span>prompt feedback loop</span></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ PLAYLISTS ============ -->
+  <section class="domain">
+    <div class="domain-head">
+      <h2>Playlists &amp; collaboration</h2>
+      <span class="count">15 endpoints</span>
+    </div>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">POST /api/playlists/create · /addsong</span>
+        <span class="route">PUT /:playlistId/order</span>
+        <span class="path">services/playlistService.js</span>
+      </div>
+      <div class="body">
+        <h3>Playlists, ordering and voice creation</h3>
+        <p>
+          Standard CRUD plus drag-free reordering. The client's ordering is treated as a
+          <em>preference, not the whole truth</em>: anything it doesn't mention keeps its relative
+          order and follows, so a stale list can't delete a song a collaborator just added.
+        </p>
+        <p>
+          Voice creation parses a spoken command — "make me a playlist for studying" — into a name
+          and a type, then fills it from the recommendation engine.
+        </p>
+        <div class="stack"><span>Web Speech API</span><span>command parsing</span><span>merge-not-replace ordering</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">POST /invite/username · /invite/qr</span>
+        <span class="route">POST /invitations/:id/respond</span>
+        <span class="path">models/PlaylistInvitation.js</span>
+      </div>
+      <div class="body">
+        <h3>Invitations you can decline</h3>
+        <p>
+          Three ways in: by username, by expiring link, or by QR code. Inviting someone by name
+          creates a <strong>pending invitation</strong> they accept or decline — a mood-derived
+          playlist is personal enough that joining should be a choice, not something done to you.
+        </p>
+        <p>
+          A partial unique index allows re-inviting after a decline but blocks duplicate pending
+          invites, and the accept is a conditional update so a double-click can't join twice.
+          Removing a collaborator rotates the invite code, so the link they hold stops working.
+        </p>
+        <div class="stack"><span>partial unique index</span><span>qrcode</span><span>7-day link TTL</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="path">services/socketManager.js</span>
+        <span class="path">services/socketAuth.js</span>
+        <span class="path">context/SocketContext.jsx</span>
+      </div>
+      <div class="body">
+        <h3>Realtime collaboration</h3>
+        <p>
+          <strong>Socket.IO</strong> with authentication in the handshake middleware: identity comes
+          from the verified JWT on <code>socket.data</code>, never from the event payload. Joining a
+          playlist room requires a membership check — being signed in doesn't entitle you to
+          someone else's traffic.
+        </p>
+        <p>
+          Presence is keyed by socket id, so two tabs show you once and closing one doesn't remove
+          you. The server is the single source of realtime events; the client only says which room
+          it wants. Handshakes mint a fresh token, and a rejected reconnect refreshes and retries —
+          Socket.IO won't retry a middleware rejection on its own.
+        </p>
+        <div class="stack"><span>Socket.IO</span><span>io.use() auth</span><span>room authorization</span><span>presence roster</span></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ GAMIFICATION ============ -->
+  <section class="domain">
+    <div class="domain-head">
+      <h2>Progress &amp; motivation</h2>
+      <span class="count">3 endpoints</span>
+    </div>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">GET /api/gamification/stats</span>
+        <span class="path">services/pointsService.js</span>
+        <span class="path">models/PointAward.js</span>
+      </div>
+      <div class="body">
+        <h3>Points, aimed at measurement</h3>
+        <p>
+          The reward table is pointed at <strong>measured sessions</strong> (30) and check-ins (15)
+          rather than volume — paying per song added would pay users to generate events carrying no
+          before/after reading, which injects motivated noise into the ledger recommendations are
+          ranked from. You can't pay for an answer and then trust it.
+        </p>
+        <p>
+          Every award is recorded against the entity that earned it, with a unique index as the
+          anti-farming mechanism: deleting and recreating a playlist, or logging out and back in,
+          pays once. Daily ceilings are enforced <strong>claim-then-verify</strong> — insert first,
+          count after, withdraw if over — because checking before writing is a race that twenty
+          concurrent requests all win.
+        </p>
+        <div class="stack"><span>unique-index dedup</span><span>atomic $inc / $max</span><span>TOCTOU-safe caps</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="path">utils/dayKey.js</span>
+        <span class="path">services/badgeService.js</span>
+      </div>
+      <div class="body">
+        <h3>Streaks, levels and badges</h3>
+        <p>
+          Streaks count <strong>calendar days</strong> via memoised <code>Intl.DateTimeFormat</code>,
+          not elapsed milliseconds — an 11pm visit followed by an 8am one is two days, and raw
+          arithmetic scored it as zero. A grace period forgives one short gap every two weeks, and a
+          broken streak is worded as a restart rather than announced as an achievement.
+        </p>
+        <p>
+          Levels derive from a single threshold table shared by the server and the progress bar.
+          Badges are seeded from config on every boot, so an edit actually lands, and any badge
+          dropped from config is deactivated rather than left permanently unearnable.
+        </p>
+        <div class="stack"><span>Intl.DateTimeFormat</span><span>bulkWrite upserts</span><span>monotonic $max levels</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">GET /api/leaderboard?type=</span>
+        <span class="path">services/leaderboardService.js</span>
+        <span class="path">services/awardInbox.js</span>
+      </div>
+      <div class="body">
+        <h3>Leaderboards &amp; award delivery</h3>
+        <p>
+          All-time, weekly and monthly boards aggregate the award ledger over <strong>ISO week</strong>
+          and calendar-month keys, so the three tabs genuinely differ. Rebuilds are debounced behind
+          a Mongo-backed <code>TaskLock</code> so concurrent awards don't stampede, and a stale board
+          schedules its own refresh on read.
+        </p>
+        <p>
+          Award notifications track delivery: emitting into an empty room isn't a notification, so
+          points earned before the socket connects — the login bonus, chiefly — are replayed as a
+          single summary on the next connection.
+        </p>
+        <div class="stack"><span>aggregation pipeline</span><span>distributed lock</span><span>delivery receipts</span></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ PRIVACY ============ -->
+  <section class="domain">
+    <div class="domain-head">
+      <h2>Privacy &amp; data rights</h2>
+      <span class="count">3 endpoints</span>
+    </div>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="route">GET /api/privacy/export</span>
+        <span class="route">DELETE /wellbeing-data · /account</span>
+        <span class="path">services/privacyService.js</span>
+      </div>
+      <div class="body">
+        <h3>Export and erasure</h3>
+        <p>
+          A single JSON document with everything held about you: mood history, song feedback,
+          session outcomes, playlists, progress and badges. Erasure comes in two strengths —
+          wellbeing data only, which also resets the counters derived from it, or the whole account.
+        </p>
+        <p>
+          Account deletion runs in a <strong>transaction</strong> and sweeps every collection keyed
+          to the user, including the award ledger, live refresh tokens, invitations and cached
+          leaderboard rows. Playlists you own are removed; playlists you merely collaborated on
+          survive with your membership stripped, so leaving can't destroy someone else's data.
+        </p>
+        <div class="stack"><span>Mongo transactions</span><span>GDPR Art. 15 / 17</span><span>cross-collection sweep</span></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ PLATFORM ============ -->
+  <section class="domain">
+    <div class="domain-head">
+      <h2>Platform &amp; hardening</h2>
+      <span class="count">cross-cutting</span>
+    </div>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="path">config/security.js</span>
+        <span class="path">middlewares/</span>
+      </div>
+      <div class="body">
+        <h3>Request hardening</h3>
+        <p>
+          <strong>Helmet</strong> for security headers and CSP, <strong>CORS</strong> with an
+          explicit origin allowlist, per-route <strong>rate limiting</strong> (tighter on auth and
+          AI endpoints), <strong>mongo-sanitize</strong> against operator injection, and
+          <strong>express-validator</strong> schemas on every mutating route. Errors funnel through
+          one handler so stack traces never reach a client.
+        </p>
+        <div class="stack"><span>helmet</span><span>express-rate-limit</span><span>express-mongo-sanitize</span><span>compression</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="path">tests/ · evals/ · scripts/</span>
+        <span class="path">.github/workflows/</span>
+      </div>
+      <div class="body">
+        <h3>Testing, evals and migrations</h3>
+        <p>
+          237 backend tests on <strong>Vitest + Supertest</strong> against
+          <strong>mongodb-memory-server</strong>, and 45 frontend tests on Testing Library + jsdom,
+          run in GitHub Actions. Concurrency tests fire twenty simultaneous requests to prove
+          updates aren't lost; regression tests are checked against the pre-fix code to prove they
+          actually fail.
+        </p>
+        <p>
+          Idempotent migration and backfill scripts run dry by default and apply only with
+          <code>--commit</code>. Indexes are built explicitly at startup rather than lazily, because
+          several writes depend on unique constraints for correctness.
+        </p>
+        <div class="stack"><span>Vitest</span><span>Supertest</span><span>mongodb-memory-server</span><span>GitHub Actions</span></div>
+      </div>
+    </article>
+
+    <article class="feature">
+      <div class="meta">
+        <span class="path">frontend/src/</span>
+        <span class="path">vite.config.js</span>
+      </div>
+      <div class="body">
+        <h3>Frontend architecture</h3>
+        <p>
+          <strong>React 19</strong> on <strong>Vite</strong> with <strong>Tailwind</strong>, routed
+          by react-router-dom with route-level code splitting. Four contexts own cross-cutting state
+          — auth, socket, gamification, Spotify — and data fetching lives in hooks
+          (<code>usePlaylists</code>, <code>useChatMessages</code>, <code>useSocketEvents</code>)
+          rather than in components.
+        </p>
+        <p>
+          A single axios client attaches the access token, transparently refreshes once on a 401 and
+          retries — but never for credential endpoints, so a mistyped password can't end the session
+          you already had. Error boundaries wrap each independently-failing region.
+        </p>
+        <div class="stack"><span>React 19</span><span>Vite</span><span>Tailwind</span><span>axios interceptors</span><span>error boundaries</span></div>
+      </div>
+    </article>
+  </section>
+
+  <!-- ============ COLOPHON ============ -->
+  <section class="colophon">
+    <h2>Stack at a glance</h2>
+    <p>
+      One npm workspace, two apps. The backend deploys to Render, the frontend to Vercel — which is
+      why sessions are cross-origin and cookies carry <code>SameSite=None; Secure</code>.
+    </p>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Layer</th><th>Technology</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Frontend</td><td>React 19, Vite, Tailwind CSS, react-router-dom, axios, socket.io-client</td></tr>
+          <tr><td>Backend</td><td>Node.js, Express 4, Socket.IO, Mongoose</td></tr>
+          <tr><td>Database</td><td>MongoDB — 16 collections, explicit index creation, transactions for erasure</td></tr>
+          <tr><td>AI</td><td>Google Gemini 3.5 Flash via @google/generative-ai, structured output, model failover</td></tr>
+          <tr><td>Music</td><td>Spotify Web API + Web Playback SDK, iTunes Search API for previews</td></tr>
+          <tr><td>Auth</td><td>JWT access tokens, rotating refresh tokens, bcrypt, express-session + connect-mongo</td></tr>
+          <tr><td>Realtime</td><td>Socket.IO with handshake auth and per-room authorization</td></tr>
+          <tr><td>Testing</td><td>Vitest, Supertest, mongodb-memory-server, Testing Library, jsdom, GitHub Actions</td></tr>
+          <tr><td>Security</td><td>helmet, CORS allowlist, express-rate-limit, express-mongo-sanitize, express-validator</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
