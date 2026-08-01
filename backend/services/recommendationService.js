@@ -20,6 +20,7 @@ import { buildTasteProfile, getSkippedSongTitles } from "./tasteService.js";
 import { loadTherapyProfile } from "./userProfileService.js";
 import logger from "../utils/logger.js";
 import { findPreviewUrl } from "./previewService.js";
+import { assignArm, recordImpressions } from "./policyService.js";
 
 const buildYouTubeSearchUrl = (title, artist) => {
   const cleaned = `${title} ${artist}`.replace(/[^\w\s]/g, " ").trim();
@@ -35,12 +36,19 @@ const buildYouTubeSearchUrl = (title, artist) => {
  * the prompt read `likes`/`skips` from a field nothing ever wrote, so every
  * request looked identical regardless of how much the user had told us.
  */
-const loadPersonalizationContext = async (userId, startingMood) => {
+/**
+ * The control arm is served without the measured-effect list.
+ *
+ * A control that still received the ranked songs would not be a control — it
+ * would be the same policy with extra steps, and the baseline it produced would
+ * be contaminated by exactly the signal it exists to isolate.
+ */
+const loadPersonalizationContext = async (userId, startingMood, arm = "policy") => {
   const [profile, taste, avoidSongs, provenSongs] = await Promise.all([
     loadTherapyProfile(userId),
     buildTasteProfile(userId),
     getSkippedSongTitles(userId),
-    loadProvenSongs(startingMood),
+    arm === "control" ? [] : loadProvenSongs(startingMood),
   ]);
 
   return { ...profile, taste, avoidSongs, provenSongs };
@@ -199,6 +207,7 @@ export const generateRecommendations = async ({
   message,
   conversationHistory = [],
   region,
+  timeZone = "UTC",
 }) => {
   const risk = await assessRisk(message, { region });
   if (risk.level === RISK_LEVELS.CRISIS) {
@@ -206,7 +215,12 @@ export const generateRecommendations = async ({
   }
 
   const startingMood = await getLatestSelfRating(userId);
-  const userProfile = await loadPersonalizationContext(userId, startingMood);
+
+  // Assigned before the profile is loaded, because the control arm deliberately
+  // does not get the measured-effect ranking — that is the whole point of it.
+  const arm = assignArm();
+
+  const userProfile = await loadPersonalizationContext(userId, startingMood, arm);
   const requestedCount = parseRequestedSongCount(message);
 
   const currentMood = await detectMood(message, conversationHistory, userProfile);
@@ -277,9 +291,24 @@ export const generateRecommendations = async ({
     await recordMood({ userId, mood: detectedMood, context: message, source: "chat" });
   }
 
+  // What was served and with what probability. Fire-and-forget: a failed
+  // impression write costs evaluation data, never the user's recommendation.
+  recordImpressions({
+    userId,
+    sessionId: recommendation._id,
+    recommendations,
+    arm,
+    startingMood,
+    detectedMood: mayStoreMood ? detectedMood : undefined,
+    timeZone,
+  }).catch(() => {});
+
   return {
     // Returned so the client can attach before/after feedback to this session.
     sessionId: recommendation._id,
+    // Told to the client so an exploration pick can be labelled honestly
+    // rather than presented as a considered choice.
+    arm,
     response: result.response,
     detectedMood,
     therapeuticGoal: result.therapeuticGoal,

@@ -22,6 +22,12 @@ export const submitFeedback = ({ musicId, signal, sessionId, moodAtTime }) =>
     ...(moodAtTime ? { moodAtTime } : {}),
   });
 
+/** What has been measured to help — personal evidence first, then population. */
+export const fetchProvenSongs = (startingMood) =>
+  apiClient.get("/wellbeing/proven", {
+    params: startingMood ? { startingMood } : {},
+  });
+
 /** The user's standing ratings, keyed by song id, so the buttons show state. */
 export const fetchFeedbackSignals = () => apiClient.get("/wellbeing/feedback");
 

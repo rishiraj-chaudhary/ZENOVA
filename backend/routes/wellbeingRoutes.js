@@ -4,6 +4,7 @@ import { aiLimiter } from "../config/security.js";
 import {
   beginListeningSession,
   clearSongFeedback,
+  getProvenSongs,
   getSongFeedback,
   finishListeningSession,
   recordSessionListened,
@@ -52,6 +53,13 @@ router.get(
 );
 
 router.get("/feedback", getSongFeedback);
+
+router.get(
+  "/proven",
+  [query("startingMood").optional(OPTIONAL).isInt({ min: 1, max: 5 })],
+  validateRequest,
+  getProvenSongs
+);
 
 router.post(
   "/feedback",

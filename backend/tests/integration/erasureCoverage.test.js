@@ -36,6 +36,9 @@ const EXEMPT = {
     "recoverable from the running sums",
   Badge: "the badge catalogue itself; UserBadge holds the per-user awards",
   TaskLock: "ephemeral scheduling locks, no user data",
+  BaselineCell:
+    "counterfactual aggregate — no userId, and an individual's contribution " +
+    "is not recoverable from the running sums",
 };
 
 const isUserKeyed = (model) => {

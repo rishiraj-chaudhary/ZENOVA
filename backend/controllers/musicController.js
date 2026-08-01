@@ -24,6 +24,7 @@ export const getMusicRecommendations = asyncHandler(async (req, res) => {
     message,
     conversationHistory,
     region: resolveRegion(req),
+    timeZone: req.user?.timeZone,
   });
 
   res.json(result);

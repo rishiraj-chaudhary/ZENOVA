@@ -46,14 +46,19 @@ const useChatMessages = (userId) => {
    * came back and the before/after check-in did not — silently dropping the one
    * measurement the effect ledger is built from, on every reload.
    */
-  const [session, setSession] = useState({ sessionId: null, curated: false });
+  const [session, setSession] = useState({
+    sessionId: null,
+    curated: false,
+    arm: "policy",
+    therapeuticGoal: null,
+  });
 
   useEffect(() => {
     if (!userId) {
       setMessages([]);
       setRecommendations([]);
       setMood(null);
-      setSession({ sessionId: null, curated: false });
+      setSession({ sessionId: null, curated: false, arm: "policy", therapeuticGoal: null });
       return;
     }
 
@@ -62,7 +67,12 @@ const useChatMessages = (userId) => {
     setRecommendations(readJson(keyFor(userId, "recommendations"), []));
     setMood(sessionStorage.getItem(keyFor(userId, "mood")));
     setSession(
-      readJson(keyFor(userId, "session"), { sessionId: null, curated: false })
+      readJson(keyFor(userId, "session"), {
+        sessionId: null,
+        curated: false,
+        arm: "policy",
+        therapeuticGoal: null,
+      })
     );
   }, [userId]);
 

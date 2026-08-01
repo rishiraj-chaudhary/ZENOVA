@@ -19,6 +19,13 @@ import { awardPoints } from "../services/pointsService.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import resolveRegion from "../utils/resolveRegion.js";
 import AppError from "../utils/AppError.js";
+import MusicResource from "../models/MusicResource.js";
+import {
+  MIN_OBSERVATIONS,
+  PROVISIONAL_OBSERVATIONS,
+  getLedgerCoverage,
+  provenSongsFor,
+} from "../services/songEffectService.js";
 
 export const logMood = asyncHandler(async (req, res) => {
   const { mood, intensity, context } = req.body;
@@ -89,6 +96,44 @@ export const submitSongFeedback = asyncHandler(async (req, res) => {
   res.status(201).json(feedback);
 });
 
+/**
+ * What has actually been measured to help this person.
+ *
+ * The one screen the product's central claim justifies, and until now the
+ * ledger behind it was read only by the ranker. Everything here carries its
+ * sample size and its evidence level, so a thin result reads as thin rather
+ * than as a finding.
+ */
+export const getProvenSongs = asyncHandler(async (req, res) => {
+  const startingMood = req.query.startingMood
+    ? Number.parseInt(req.query.startingMood, 10)
+    : undefined;
+
+  const [proven, coverage] = await Promise.all([
+    provenSongsFor(req.user._id, { startingMood }),
+    getLedgerCoverage(),
+  ]);
+
+  const musicIds = [...proven.personal, ...proven.population].map((entry) => entry.musicId);
+  const songs = await MusicResource.find({ _id: { $in: musicIds } })
+    .select("title artist albumArt spotifyUri previewUrl genre")
+    .lean();
+
+  const byId = new Map(songs.map((song) => [song._id.toString(), song]));
+  const decorate = (entry) => ({
+    ...entry,
+    song: byId.get(entry.musicId.toString()) ?? null,
+  });
+
+  res.json({
+    personal: proven.personal.map(decorate).filter((entry) => entry.song),
+    population: proven.population.map(decorate).filter((entry) => entry.song),
+    measuredStates: proven.moods,
+    coverage,
+    thresholds: { provisional: PROVISIONAL_OBSERVATIONS, established: MIN_OBSERVATIONS },
+  });
+});
+
 export const getSongFeedback = asyncHandler(async (req, res) => {
   res.json({ signals: await getFeedbackSignals(req.user._id) });
 });
@@ -111,7 +156,12 @@ export const beginListeningSession = asyncHandler(async (req, res) => {
   const { sessionId, moodBefore } = req.body;
 
   res.status(201).json(
-    await startSession({ userId: req.user._id, sessionId, moodBefore })
+    await startSession({
+      userId: req.user._id,
+      sessionId,
+      moodBefore,
+      timeZone: req.user.timeZone,
+    })
   );
 });
 

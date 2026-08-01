@@ -5,6 +5,8 @@ import { checkAndAwardBadges } from "./badgeService.js";
 import { hasMoodConsent } from "./consentService.js";
 import { awardPoints } from "./pointsService.js";
 import { recordSessionEffect } from "./songEffectService.js";
+import Impression from "../models/Impression.js";
+import { contextOf, liftOf, recordBaselineObservation } from "./baselineService.js";
 
 /**
  * Opens an outcome record when a listening session starts.
@@ -12,7 +14,7 @@ import { recordSessionEffect } from "./songEffectService.js";
  * Upserted on sessionId so a user re-recording their starting mood updates the
  * existing record rather than creating a competing one.
  */
-export const startSession = async ({ userId, sessionId, moodBefore }) => {
+export const startSession = async ({ userId, sessionId, moodBefore, timeZone }) => {
   // moodBefore is self-reported health data. Enforced here rather than in the
   // UI so no caller can persist it by accident.
   if (!(await hasMoodConsent(userId))) {
@@ -28,6 +30,11 @@ export const startSession = async ({ userId, sessionId, moodBefore }) => {
 
   if (!recommendation) throw AppError.notFound("Session not found");
 
+  // The arm was decided when the recommendation was served; copy it here so an
+  // outcome can be interpreted without joining back to the impressions.
+  const impression = await Impression.findOne({ sessionId }).select("arm").lean();
+  const { hourOfDay, dayOfWeek } = contextOf(new Date(), timeZone);
+
   return SessionOutcome.findOneAndUpdate(
     { sessionId },
     {
@@ -36,6 +43,9 @@ export const startSession = async ({ userId, sessionId, moodBefore }) => {
       moodBefore,
       detectedMood: recommendation.detectedMood,
       songsPlayed: recommendation.recommendedMusic.map((entry) => entry.musicId),
+      arm: impression?.arm ?? "policy",
+      hourOfDay,
+      dayOfWeek,
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
@@ -93,6 +103,31 @@ export const completeSession = async ({ userId, sessionId, moodAfter, socketMana
     moodBefore: outcome.moodBefore,
     moodAfter,
   });
+
+  // The causal half. A control-arm session is evidence about what the *day*
+  // does; a policy session is evidence about what the *song* did, but only
+  // once the day has been subtracted from it.
+  const delta = moodAfter - outcome.moodBefore;
+
+  if (outcome.arm === "control") {
+    await recordBaselineObservation({
+      startingMood: outcome.moodBefore,
+      hourOfDay: outcome.hourOfDay,
+      dayOfWeek: outcome.dayOfWeek,
+      delta,
+      source: "randomized",
+    });
+  }
+
+  const { lift } = await liftOf({
+    delta,
+    startingMood: outcome.moodBefore,
+    hourOfDay: outcome.hourOfDay,
+    dayOfWeek: outcome.dayOfWeek,
+  });
+
+  outcome.lift = lift;
+  await outcome.save();
 
   // The behaviour the reward table now exists to encourage. Keyed on the
   // session, so re-submitting a rating cannot pay twice.

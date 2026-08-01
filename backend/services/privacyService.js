@@ -1,3 +1,4 @@
+import Impression from "../models/Impression.js";
 import ListeningFeedback from "../models/ListeningFeedback.js";
 import Leaderboard from "../models/Leaderboard.js";
 import PlaylistInvitation from "../models/PlaylistInvitation.js";
@@ -98,6 +99,7 @@ const eraseWellbeing = async (userId, session) => {
     ListeningFeedback.deleteMany({ userId }, options),
     SessionOutcome.deleteMany({ userId }, options),
     Recommendation.deleteMany({ userId }, options),
+    Impression.deleteMany({ userId }, options),
   ]);
 
   // Counters derived from the records above are the same data in a different
@@ -148,6 +150,10 @@ export const deleteAccount = (userId) =>
       // naming them, and their rows in cached leaderboards — the last of which
       // would keep showing a deleted user's name on a public board.
       PointAward.deleteMany({ userId }, options),
+      // Served candidates and their propensities. BaselineCell is not swept:
+      // it holds no userId and its running sums cannot be decomposed back to
+      // an individual — see the exemption list in erasureCoverage.test.js.
+      Impression.deleteMany({ userId }, options),
       RefreshToken.deleteMany({ userId }, options),
       PlaylistInvitation.deleteMany(
         { $or: [{ invitedUserId: userId }, { invitedByUserId: userId }] },

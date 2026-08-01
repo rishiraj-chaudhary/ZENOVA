@@ -47,7 +47,7 @@ function Chatbot() {
   const [support, setSupport] = useState(null);
   // Lives in useChatMessages so it survives a refresh alongside the songs it
   // belongs to; a reload used to keep the songs and lose the measurement.
-  const { sessionId, curated } = session;
+  const { sessionId, curated, arm, therapeuticGoal } = session;
   const [checkInPhase, setCheckInPhase] = useState(null);
   // The after-rating is only meaningful once something was actually heard.
   const [hasListened, setHasListened] = useState(false);
@@ -106,6 +106,11 @@ function Chatbot() {
           // The server says when it fell back to the fixed catalogue. Ignoring
           // it passed the same eight songs off as a personalised result.
           curated: Boolean(result.curated),
+          // The server says when a session was served from the exploration
+          // arm, so the UI can say so rather than presenting a deliberately
+          // unoptimised pick as a considered one.
+          arm: result.arm ?? "policy",
+          therapeuticGoal: result.therapeuticGoal ?? null,
         });
         setCheckInPhase(result.sessionId ? "before" : null);
         setHasListened(false);
@@ -204,7 +209,7 @@ function Chatbot() {
 
   const completeAfterRating = () => {
     setCheckInPhase(null);
-    setSession({ sessionId: null, curated: false });
+    setSession({ sessionId: null, curated: false, arm: "policy", therapeuticGoal: null });
     setHasListened(false);
   };
 
@@ -247,6 +252,8 @@ function Chatbot() {
               <RecommendationPanel
                 recommendations={recommendations}
                 curated={curated}
+                arm={arm}
+                therapeuticGoal={therapeuticGoal}
                 feedbackSignals={feedbackSignals}
                 onFeedbackChange={rememberFeedback}
                 moodColors={colorsForMood(mood)}

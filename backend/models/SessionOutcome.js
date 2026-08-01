@@ -43,6 +43,22 @@ const sessionOutcomeSchema = new mongoose.Schema(
      */
     listenedAt: { type: Date },
     completedAt: { type: Date },
+
+    /**
+     * Which arm served this session, copied from the Impression so the outcome
+     * is interpretable without a join.
+     */
+    arm: { type: String, enum: ["policy", "control"], default: "policy" },
+
+    /** The user-local context, for the baseline cell this belongs to. */
+    hourOfDay: { type: Number, min: 0, max: 23 },
+    dayOfWeek: { type: Number, min: 0, max: 6 },
+
+    /**
+     * delta minus what this cell does without a recommendation. Null until a
+     * baseline exists — an absent lift is honest, a zero would not be.
+     */
+    lift: { type: Number, default: null },
   },
   { timestamps: true }
 );

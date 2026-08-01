@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import * as wellbeingAPI from "../api/wellbeingAPI.js";
+import ProvenSongs from "../components/ProvenSongs.jsx";
 import MoodChart from "../components/MoodChart.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 
@@ -226,6 +227,13 @@ const Insights = () => {
             </div>
           </div>
         )}
+
+        {/* Outside the hasEnoughData branch on purpose: measured effects come
+            from completed sessions, not from check-in volume, so this can have
+            something to say before the mood dashboard unlocks. */}
+        <div className="mt-6">
+          <ProvenSongs />
+        </div>
       </div>
     </main>
   );

@@ -6,6 +6,8 @@ import SessionCheckIn from "../SessionCheckIn.jsx";
 const RecommendationPanel = ({
   recommendations,
   curated,
+  arm,
+  therapeuticGoal,
   moodColors,
   mood,
   sessionId,
@@ -25,6 +27,14 @@ const RecommendationPanel = ({
   onAfterRated,
 }) => (
   <aside className="flex h-full flex-col border-l border-white/10 bg-white/5">
+    {arm === "control" && (
+      <p className="border-b border-sky-500/20 bg-sky-500/10 px-4 py-2 text-xs text-sky-200">
+        <i className="fa-solid fa-flask mr-1.5" aria-hidden="true" />
+        This set is a test — we don&apos;t know yet whether it works for you.
+        Rating it afterwards is what tells us.
+      </p>
+    )}
+
     {curated && (
       <p className="border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-200">
         Personalised picks aren&apos;t available right now, so these are general
@@ -36,6 +46,13 @@ const RecommendationPanel = ({
       <h2 className="font-light text-white">
         {curated ? "General suggestions" : "Recommendations"}
         <span className="ml-2 text-xs text-gray-400">{recommendations.length}</span>
+        {/* The model states a goal for the set and it was never shown; the
+            explanation is what separates this from a playlist generator. */}
+        {therapeuticGoal && (
+          <span className="mt-0.5 block text-xs font-normal text-gray-400">
+            {therapeuticGoal}
+          </span>
+        )}
       </h2>
 
       <div className="flex items-center gap-2">

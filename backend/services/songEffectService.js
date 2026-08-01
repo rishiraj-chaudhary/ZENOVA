@@ -1,5 +1,6 @@
 import SongEffect from "../models/SongEffect.js";
 import logger from "../utils/logger.js";
+import SessionOutcome from "../models/SessionOutcome.js";
 
 /**
  * Below this many observations a cell's mean is noise, not evidence. Surfacing
@@ -124,6 +125,72 @@ export const getEffectForSong = async (musicId, startingMood) => {
 };
 
 /** Coverage stats, so the dashboard can say how much evidence exists at all. */
+/**
+ * What the ledger has measured for this person's usual starting states.
+ *
+ * The estimator has always existed and was read in exactly one place — ranking
+ * — so the product measured which songs help and never told anyone. This is
+ * the read side.
+ *
+ * Personal evidence first, population evidence behind it, never mixed: "this
+ * worked for you" and "this worked for people who felt like you" are different
+ * claims and the caller has to be able to tell them apart.
+ */
+export const provenSongsFor = async (userId, { startingMood, limit = 12 } = {}) => {
+  const moods = startingMood
+    ? [startingMood]
+    : await SessionOutcome.distinct("moodBefore", { userId });
+
+  if (moods.length === 0) return { personal: [], population: [], moods: [] };
+
+  const personalOutcomes = await SessionOutcome.find({
+    userId,
+    moodAfter: { $ne: null },
+  })
+    .select("songsPlayed moodBefore moodAfter lift")
+    .lean();
+
+  // Per-song personal evidence, from this user's own completed sessions.
+  const bySong = new Map();
+  for (const outcome of personalOutcomes) {
+    const delta = outcome.moodAfter - outcome.moodBefore;
+    for (const musicId of outcome.songsPlayed ?? []) {
+      const key = musicId.toString();
+      const entry = bySong.get(key) ?? { musicId, observations: 0, sumDelta: 0, sumLift: 0 };
+      entry.observations += 1;
+      entry.sumDelta += delta;
+      entry.sumLift += outcome.lift ?? delta;
+      bySong.set(key, entry);
+    }
+  }
+
+  const personal = [...bySong.values()]
+    .map((entry) => ({
+      musicId: entry.musicId,
+      observations: entry.observations,
+      // Shrunk exactly as the population estimate is: one session that went
+      // well is not evidence, and should not be shown as though it were.
+      meanDelta: entry.sumDelta / entry.observations,
+      shrunkDelta: entry.sumDelta / (entry.observations + PRIOR_STRENGTH),
+      meanLift: entry.sumLift / entry.observations,
+      evidence:
+        entry.observations >= MIN_OBSERVATIONS
+          ? "established"
+          : entry.observations >= PROVISIONAL_OBSERVATIONS
+            ? "provisional"
+            : "insufficient",
+    }))
+    .filter((entry) => entry.shrunkDelta > 0)
+    .sort((a, b) => b.shrunkDelta - a.shrunkDelta)
+    .slice(0, limit);
+
+  const population = (
+    await Promise.all(moods.map((mood) => rankByMeasuredEffect(mood, { limit })))
+  ).flat();
+
+  return { personal, population: population.slice(0, limit), moods };
+};
+
 export const getLedgerCoverage = async () => {
   const [totals] = await SongEffect.aggregate([
     {
