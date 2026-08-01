@@ -5,6 +5,7 @@ import {
   getAccessToken,
   getStoredRefreshToken,
   setAccessToken,
+  storeRefreshToken,
 } from "../utils/authStorage.js";
 
 const apiClient = axios.create({
@@ -65,6 +66,12 @@ const refreshSession = async () => {
     )
     .then(({ data }) => {
       setAccessToken(data.user.token);
+
+      // Rotation is single-use, so the mirror must advance with it. Keeping the
+      // spent token meant the next refresh replayed it, which reuse detection
+      // correctly treats as theft — revoking every session on every device.
+      if (data.refreshToken) storeRefreshToken(data.refreshToken);
+
       return data.user.token;
     })
     .finally(() => {

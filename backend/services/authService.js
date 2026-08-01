@@ -9,11 +9,25 @@ export const issueAccessToken = (userId) =>
     expiresIn: config.jwt.expiresIn,
   });
 
-/** The only user shape that ever leaves the auth layer — never includes the hash. */
+/**
+ * The only user shape that ever leaves the auth layer — never includes the hash.
+ *
+ * Must carry every field the client branches on. Omitting onboardedAt, consent
+ * and preferences caused four separate failures: onboarding was forced on every
+ * login (needsOnboarding read a field that was never sent), the daily check-in
+ * card never rendered, and Settings displayed consent as OFF while it was ON —
+ * telling users their health data was not being stored while it was.
+ */
 const toPublicUser = (user) => ({
   _id: user._id,
   name: user.name,
   email: user.email,
+  onboardedAt: user.onboardedAt ?? null,
+  preferences: user.preferences ?? [],
+  consent: {
+    moodTracking: user.consent?.moodTracking ?? false,
+    grantedAt: user.consent?.grantedAt ?? null,
+  },
 });
 
 export const registerUser = async ({ name, email, password }) => {

@@ -23,6 +23,10 @@ export const setAccessToken = (token) => {
  */
 export const getStoredRefreshToken = () => sessionStorage.getItem(REFRESH_KEY);
 
+/** Advances the mirror after a rotation, without touching the rest of the session. */
+export const storeRefreshToken = (refreshToken) =>
+  sessionStorage.setItem(REFRESH_KEY, refreshToken);
+
 export const storeAuth = ({ token, userId, refreshToken }) => {
   setAccessToken(token);
   if (userId) sessionStorage.setItem(USER_ID_KEY, userId);

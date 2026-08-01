@@ -61,21 +61,37 @@ export const updateConsent = asyncHandler(async (req, res) => {
   res.json({ consent: updated.consent });
 });
 
+/**
+ * Records the intro answers, exactly once.
+ *
+ * The update is conditional on onboardedAt being unset, so a replay cannot
+ * overwrite settings the user has since changed. That mattered: the client was
+ * re-showing this flow on every login with the consent box pre-ticked, so a
+ * replay silently re-granted mood-tracking consent that had been withdrawn in
+ * Settings — reversing a GDPR Art. 9 decision through a dialog with no dismiss.
+ */
 export const completeOnboarding = asyncHandler(async (req, res) => {
   const { preferences = [], moodTrackingConsent = false } = req.body;
+  const now = new Date();
 
-  const updated = await User.findByIdAndUpdate(
-    req.user._id,
+  const updated = await User.findOneAndUpdate(
+    { _id: req.user._id, onboardedAt: null },
     {
       preferences,
-      onboardedAt: new Date(),
+      onboardedAt: now,
       "consent.moodTracking": moodTrackingConsent,
-      "consent.grantedAt": moodTrackingConsent ? new Date() : null,
+      "consent.grantedAt": moodTrackingConsent ? now : null,
     },
     { new: true, runValidators: true }
   ).select("-password");
 
-  if (!updated) throw AppError.notFound("User not found");
+  // No match means onboarding was already completed. Return the current
+  // profile rather than an error: the client only needs to stop showing it.
+  if (!updated) {
+    const existing = await User.findById(req.user._id).select("-password");
+    if (!existing) throw AppError.notFound("User not found");
+    return res.json(existing);
+  }
 
   res.json(updated);
 });

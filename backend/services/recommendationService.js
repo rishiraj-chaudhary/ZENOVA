@@ -173,16 +173,29 @@ export const generateRecommendations = async ({
     currentMood,
   });
 
-  const aiResult = await generateJson(
-    risk.level === RISK_LEVELS.ELEVATED
-      ? `${ELEVATED_RISK_PROMPT_GUIDANCE}\n\n${basePrompt}`
-      : basePrompt,
-    { schema: RECOMMENDATION_SCHEMA, operation: "recommendation" }
-  );
+  // generateJson returns null on an unparseable response but throws on an
+  // outage. Both must degrade to the curated set: at elevated risk the support
+  // contacts travel with this response, and an exception would discard them
+  // and surface an error bubble instead.
+  let aiResult = null;
+  try {
+    aiResult = await generateJson(
+      risk.level === RISK_LEVELS.ELEVATED
+        ? `${ELEVATED_RISK_PROMPT_GUIDANCE}\n\n${basePrompt}`
+        : basePrompt,
+      { schema: RECOMMENDATION_SCHEMA, operation: "recommendation" }
+    );
+  } catch (error) {
+    logger.warn("recommendation generation failed, using curated set", {
+      detail: error.message,
+      risk: risk.level,
+    });
+  }
 
-  const result = Array.isArray(aiResult?.recommendations)
-    ? aiResult
-    : buildFallbackResult(requestedCount, currentMood);
+  const usedFallback = !Array.isArray(aiResult?.recommendations);
+  const result = usedFallback
+    ? buildFallbackResult(requestedCount, currentMood)
+    : aiResult;
 
   const songs = padToRequestedCount(result.recommendations, requestedCount);
 
@@ -220,6 +233,9 @@ export const generateRecommendations = async ({
     detectedMood,
     therapeuticGoal: result.therapeuticGoal,
     recommendations,
+    // Lets the client say these are stand-ins rather than passing off the same
+    // curated eight songs as a personalised result.
+    curated: usedFallback,
     // Present only at elevated risk: support is offered alongside the music.
     ...(risk.level === RISK_LEVELS.ELEVATED && {
       riskLevel: risk.level,

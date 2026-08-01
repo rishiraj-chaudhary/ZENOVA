@@ -7,10 +7,7 @@ import { getMoodHistoryPage, recordMood } from "../services/moodService.js";
 import { completeSession, startSession } from "../services/outcomeService.js";
 import { recordFeedback, removeFeedback } from "../services/tasteService.js";
 import asyncHandler from "../utils/asyncHandler.js";
-
-/** Region hint for helpline selection, from an explicit query or the browser. */
-const resolveRegion = (req) =>
-  req.query.region ?? req.headers["accept-language"]?.split(",")[0]?.split("-")[1];
+import resolveRegion from "../utils/resolveRegion.js";
 
 export const logMood = asyncHandler(async (req, res) => {
   const { mood, intensity, context } = req.body;

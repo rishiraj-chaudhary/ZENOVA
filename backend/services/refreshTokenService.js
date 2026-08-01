@@ -43,16 +43,32 @@ export const rotateRefreshToken = async (presentedToken, { userAgent } = {}) => 
   if (!presentedToken) throw AppError.unauthorized("No refresh token provided");
 
   const presentedHash = hash(presentedToken);
-  const stored = await RefreshToken.findOne({ tokenHash: presentedHash });
 
-  if (!stored) throw AppError.unauthorized("Invalid refresh token");
+  // Claiming the token IS the rotation. A read-then-write let two concurrent
+  // requests both observe revokedAt === null and both succeed, so an attacker
+  // holding a stolen token could fork a parallel live chain by racing the
+  // legitimate client — and reuse was never detected. The conditional update
+  // makes exactly one caller the winner.
+  const stored = await RefreshToken.findOneAndUpdate(
+    { tokenHash: presentedHash, revokedAt: null },
+    { $set: { revokedAt: new Date() } },
+    { new: false }
+  );
 
-  if (stored.revokedAt) {
-    // A revoked token being presented means the chain has been compromised or
-    // replayed. Cut off the whole family.
-    logger.warn("refresh token reuse detected", { userId: stored.userId.toString() });
-    await revokeAllForUser(stored.userId);
-    throw AppError.unauthorized("Refresh token has been revoked");
+  if (!stored) {
+    // Either unknown, or already claimed. If it exists it was a replay, which
+    // means the chain is compromised: revoke the whole family.
+    const known = await RefreshToken.findOne({ tokenHash: presentedHash })
+      .select("userId")
+      .lean();
+
+    if (known) {
+      logger.warn("refresh token reuse detected", { userId: known.userId.toString() });
+      await revokeAllForUser(known.userId);
+      throw AppError.unauthorized("Refresh token has been revoked");
+    }
+
+    throw AppError.unauthorized("Invalid refresh token");
   }
 
   if (stored.expiresAt < new Date()) {
@@ -60,10 +76,10 @@ export const rotateRefreshToken = async (presentedToken, { userAgent } = {}) => 
   }
 
   const nextToken = await issueRefreshToken(stored.userId, { userAgent });
-
-  stored.revokedAt = new Date();
-  stored.replacedBy = hash(nextToken);
-  await stored.save();
+  await RefreshToken.updateOne(
+    { _id: stored._id },
+    { $set: { replacedBy: hash(nextToken) } }
+  );
 
   return { token: nextToken, userId: stored.userId };
 };

@@ -8,6 +8,7 @@ import {
 } from "../services/spotifyService.js";
 import AppError from "../utils/AppError.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import resolveRegion from "../utils/resolveRegion.js";
 
 export const getMusicRecommendations = asyncHandler(async (req, res) => {
   const { message, conversationHistory } = req.body;
@@ -16,6 +17,7 @@ export const getMusicRecommendations = asyncHandler(async (req, res) => {
     userId: req.user._id,
     message,
     conversationHistory,
+    region: resolveRegion(req),
   });
 
   res.json(result);

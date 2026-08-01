@@ -1,5 +1,6 @@
 import { analyzeMood as analyzeMoodService, generateChatReply } from "../services/therapyChatService.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import resolveRegion from "../utils/resolveRegion.js";
 
 /**
  * Signed-in callers get history-aware analysis; anonymous callers are served as
@@ -11,6 +12,7 @@ export const analyzeMood = asyncHandler(async (req, res) => {
     userId: req.user?._id,
     userInput: req.body.userInput,
     conversationHistory: req.body.conversationHistory,
+    region: resolveRegion(req),
   });
 
   res.json({ message: "Mood analyzed successfully", ...result });
@@ -21,6 +23,7 @@ export const chatWithAI = asyncHandler(async (req, res) => {
     userId: req.user?._id,
     userInput: req.body.userInput,
     conversationHistory: req.body.conversationHistory,
+    region: resolveRegion(req),
   });
 
   res.json(result);

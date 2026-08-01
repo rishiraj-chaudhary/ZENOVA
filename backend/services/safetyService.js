@@ -21,7 +21,14 @@ export const RISK_LEVELS = {
  */
 const CRISIS_PATTERNS = [
   /\bkill(ing)?\s+my\s?self\b/i,
-  /\bkms\b/i,
+  /\bkys\b/i,
+  /\bunalive\b/i,
+  // "kms" is everyday shorthand for kilometres — especially in India, whose
+  // helplines head this app's registry. A preceding number means distance, so
+  // "I ran 5 kms today" must not raise a crisis panel. Ambiguous uses with no
+  // number fall through to the model layer, which is the right split: the
+  // regex layer is for precision, the model for recall.
+  /(?<!\d)(?<!\d\s)\bkms\b/i,
   /\bsuicid(e|al)\b/i,
   /\bend(ing)?\s+(my|it)\s+(life|all)\b/i,
   /\btake\s+my\s+own\s+life\b/i,
@@ -33,6 +40,13 @@ const CRISIS_PATTERNS = [
   /\bself[-\s]?harm/i,
   /\bcut(ting)?\s+my\s?self\b/i,
   /\boverdos(e|ing)\b/i,
+  // Phrasings the labelled dataset showed the regex layer missing, which the
+  // model layer had been silently covering for.
+  /\bcan'?t\s+(do\s+this|keep\s+going)\s+anymore\b/i,
+  /\bnot\s+worth\s+living\b/i,
+  /\bwon'?t\s+be\s+(here|around)\s+(much\s+longer|tomorrow)\b/i,
+  /\bstop\s+(the\s+pain|existing)\b/i,
+  /\b(last|final)\s+(night|day|playlist|song)\s+(i|for\s+me)\b/i,
 ];
 
 const ELEVATED_PATTERNS = [

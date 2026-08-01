@@ -27,7 +27,9 @@ const Onboarding = ({ onComplete }) => {
   const [step, setStep] = useState(0);
   const [genres, setGenres] = useState([]);
   const [goals, setGoals] = useState([]);
-  const [consent, setConsent] = useState(true);
+  // Unticked by default: consent to storing health data should be an action
+  // the user takes, not one they fail to undo.
+  const [consent, setConsent] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
