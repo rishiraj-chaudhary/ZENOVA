@@ -12,7 +12,8 @@
     "migrate": "node scripts/migrateMoodTracking.js",
     "eval:safety": "node evals/runSafetyEval.js",
     "backfill:streaks": "node scripts/backfillStreakDays.js",
-    "e2e": "node scripts/e2e.mjs"
+    "e2e": "node scripts/e2e.mjs",
+    "backfill:previews": "node scripts/backfillPreviews.js"
   },
   "keywords": [],
   "author": "",

@@ -1,5 +1,6 @@
 import SongFeedback from "./SongFeedback.jsx";
 import SpotifyPlayer from "./SpotifyPlayer.jsx";
+import YouTubeFallback from "./YouTubeFallback.jsx";
 
 /**
  * RecommendationCard component that displays a music recommendation
@@ -8,7 +9,6 @@ import SpotifyPlayer from "./SpotifyPlayer.jsx";
 function RecommendationCard({ index, song, moodColors, onAddToPlaylist, isCurrentlyPlaying, autoplayEnabled, onTrackEnded, onPlay, sessionId, moodAtTime }) {
   const extractSpotifyTrackId = (spotifyString) => {
     if (!spotifyString) return null;
-    console.log("RecommendationCard song object:", song);
     try {
       let matches = spotifyString.match(/spotify:track:([a-zA-Z0-9]+)/);
       if (matches && matches[1]) return matches[1];
@@ -78,41 +78,37 @@ function RecommendationCard({ index, song, moodColors, onAddToPlaylist, isCurren
         </div>
       </div>
 
-      {/* Spotify Player */}
-      {spotifyTrackId && (
-        <div className="mb-3">
-          <SpotifyPlayer 
-            trackId={spotifyTrackId} 
-            title={song.title} 
+      {/* Playback. A third of the catalogue has no Spotify match, and those
+          songs used to render nothing playable at all: YouTubeFallback existed
+          but was only reachable from inside SpotifyPlayer, which only mounts
+          once a track id is known. */}
+      <div className="mb-3">
+        {spotifyTrackId ? (
+          <SpotifyPlayer
+            trackId={spotifyTrackId}
+            title={song.title}
             artist={song.artist}
             albumArt={song.albumArt}
             onTrackEnded={onTrackEnded}
             autoplayEnabled={autoplayEnabled}
             isCurrentlyPlaying={isCurrentlyPlaying}
           />
-        </div>
-      )}
+        ) : (
+          <YouTubeFallback
+            title={song.title}
+            artist={song.artist}
+            albumArt={song.albumArt}
+            watchUrl={song.audioUrl}
+            previewUrl={song.previewUrl}
+            onPreviewEnded={onTrackEnded}
+          />
+        )}
+      </div>
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-2 mb-3">
-        {!spotifyTrackId && !song.audioUrl && (
-          <div>
-            <p>This song is not available</p>
-          </div>
-        )}
-        
-        {!spotifyTrackId && song.audioUrl && (
-          <a
-            href={song.audioUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-3 py-1 rounded text-xs font-medium flex items-center"
-            style={{ backgroundColor: '#FF0000', color: '#FFFFFF' }}
-          >
-            <i className="fa-brands fa-youtube mr-1"></i> YouTube
-          </a>
-        )}
-        
+        {/* The YouTube link lives in YouTubeFallback above; repeating it here
+            gave the same song two identical red buttons. */}
         {song.spotifyUrl && (
           <a 
             href={song.spotifyUrl} 

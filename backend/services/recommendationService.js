@@ -19,6 +19,7 @@ import { rankByMeasuredEffect } from "./songEffectService.js";
 import { buildTasteProfile, getSkippedSongTitles } from "./tasteService.js";
 import { loadTherapyProfile } from "./userProfileService.js";
 import logger from "../utils/logger.js";
+import { findPreviewUrl } from "./previewService.js";
 
 const buildYouTubeSearchUrl = (title, artist) => {
   const cleaned = `${title} ${artist}`.replace(/[^\w\s]/g, " ").trim();
@@ -124,8 +125,18 @@ const buildFallbackResult = (requestedCount, currentMood) => ({
  * Spotify lookup is best-effort; an unmatched song degrades to a YouTube search.
  */
 const resolveAndPersistSong = async (song) => {
-  const spotifyTrack = await findTrack(song.title, song.artist);
+  // Both lookups are best-effort and independent, so they run together.
+  const [spotifyTrack, itunesPreview] = await Promise.all([
+    findTrack(song.title, song.artist),
+    findPreviewUrl(song.title, song.artist),
+  ]);
+
   const audioUrl = spotifyTrack?.spotifyUrl ?? buildYouTubeSearchUrl(song.title, song.artist);
+
+  // Spotify stopped returning preview_url for most tracks, which is why every
+  // song in this catalogue had a null preview and the player's audio control
+  // rendered nothing.
+  const previewUrl = spotifyTrack?.previewUrl ?? itunesPreview ?? null;
 
   const musicResource = await MusicResource.findOneAndUpdate(
     { title: song.title, artist: song.artist },
@@ -140,11 +151,11 @@ const resolveAndPersistSong = async (song) => {
       energyLevel: song.energyLevel ?? "medium",
       therapeuticFunction: song.therapeuticFunction ?? "support",
       lastRecommendedAt: new Date(),
+      ...(previewUrl && { previewUrl }),
       ...(spotifyTrack && {
         spotifyId: spotifyTrack.spotifyId,
         spotifyUri: spotifyTrack.spotifyUri,
         spotifyUrl: spotifyTrack.spotifyUrl,
-        previewUrl: spotifyTrack.previewUrl,
         albumArt: spotifyTrack.albumArt,
         popularity: spotifyTrack.popularity,
         explicit: spotifyTrack.explicit,
@@ -162,11 +173,11 @@ const resolveAndPersistSong = async (song) => {
     reason: song.reason,
     energyLevel: song.energyLevel ?? "medium",
     therapeuticFunction: song.therapeuticFunction ?? "support",
+    previewUrl,
     ...(spotifyTrack && {
       spotifyId: spotifyTrack.spotifyId,
       spotifyUri: spotifyTrack.spotifyUri,
       spotifyUrl: spotifyTrack.spotifyUrl,
-      previewUrl: spotifyTrack.previewUrl,
       albumArt: spotifyTrack.albumArt,
     }),
   };

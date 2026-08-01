@@ -13,6 +13,12 @@ const playlistSongSchema = new mongoose.Schema(
     albumArt: String,
     genre: String,
     reason: String,
+    /**
+     * The 30-second preview. Absent from this schema, the Playlist page's audio
+     * control read `song.previewUrl` off an embedded document that never had
+     * the field, so it could not render even for songs that had a preview.
+     */
+    previewUrl: String,
   },
   { _id: false }
 );

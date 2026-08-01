@@ -96,6 +96,7 @@ const toPlaylistEntry = (song, reason) => ({
   genre: song.genre,
   spotifyUri: song.spotifyUri,
   albumArt: song.albumArt,
+  previewUrl: song.previewUrl,
   reason,
 });
 
