@@ -33,7 +33,7 @@ const CollaboratorsList = ({ playlistId, isOwner }) => {
         collaborator_removed: refreshIfSamePlaylist,
     });
 
-    const removeCollaborator = async (userId, username) => {
+    const removeCollaborator = async (userId) => {
         if (!isOwner) return;
 
         try {
@@ -95,7 +95,7 @@ const CollaboratorsList = ({ playlistId, isOwner }) => {
                         {isOwner && (
                             <button
                                 className="text-red-400 hover:text-red-300 transition-colors duration-200 p-2 rounded-full hover:bg-white/10"
-                                onClick={() => removeCollaborator(collaborator._id, collaborator.name)}
+                                onClick={() => removeCollaborator(collaborator._id)}
                                 title={`Remove ${collaborator.name}`}
                             >
                                 <i className="fa-solid fa-user-minus text-sm"></i>
