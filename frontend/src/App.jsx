@@ -22,6 +22,7 @@ import Register from "./pages/Register.jsx";
  * Routes behind auth are lazily loaded: a signed-out visitor on the landing
  * page should not download the playlist editor, the chat client or the charts.
  */
+const Assistant = lazy(() => import("./pages/Assistant.jsx"));
 const Gamification = lazy(() => import("./pages/Gamification.jsx"));
 const Insights = lazy(() => import("./pages/Insights.jsx"));
 const InviteAccept = lazy(() => import("./pages/InviteAccept.jsx"));
@@ -75,6 +76,7 @@ const AppRoutes = () => {
               <Route path="/invite/:inviteCode" element={<InviteAccept />} />
 
               {[
+                ["/assistant", <Assistant />],
                 ["/profile", <Profile />],
                 ["/playlist", <Playlist />],
                 ["/insights", <Insights />],

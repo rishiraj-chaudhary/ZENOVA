@@ -5,6 +5,7 @@ import { useGamification } from "../context/GamificationContext.jsx";
 
 const NAV_LINKS = [
   { to: "/profile", label: "Chat", icon: "fa-comment" },
+  { to: "/assistant", label: "Assistant", icon: "fa-wand-magic-sparkles" },
   // fa-list-music and fa-gamepad are Font Awesome Pro icons; the free build
   // renders an empty box for both.
   { to: "/playlist", label: "Playlists", icon: "fa-list-ul" },
