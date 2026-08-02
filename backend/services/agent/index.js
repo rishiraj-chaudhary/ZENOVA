@@ -1,4 +1,5 @@
 import { registerReadTools } from "./tools/readTools.js";
+import { registerWriteTools } from "./tools/writeTools.js";
 import { clearTools, listTools } from "./toolRegistry.js";
 
 export { runAgent } from "./orchestrator.js";
@@ -14,6 +15,7 @@ export const initializeAgent = () => {
   if (listTools().length > 0) return listTools().length;
 
   registerReadTools();
+  registerWriteTools();
   return listTools().length;
 };
 

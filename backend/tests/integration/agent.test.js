@@ -307,3 +307,170 @@ describe("the tool catalogue", () => {
     );
   });
 });
+
+describe("changes are proposed, then confirmed", () => {
+  it("does not act on the model's word alone", async () => {
+    clearTools();
+    initializeAgent();
+
+    const user = await makeUser();
+    const { propose, redeem } = await import("../../services/agent/confirmation.js");
+
+    const action = await propose({
+      userId: user._id,
+      tool: getTool("create_playlist"),
+      input: { name: "Late nights" },
+    });
+
+    // The person sees the action, not the tool name.
+    expect(action.summary).toBe('Create a playlist called "Late nights"');
+    expect(action.status).toBe("pending");
+    expect(await Playlist.countDocuments({ userId: user._id })).toBe(0);
+
+    const result = await redeem({
+      token: action.token,
+      userId: user._id,
+      ctx: { userId: user._id, consent: { moodTracking: true } },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(await Playlist.countDocuments({ userId: user._id })).toBe(1);
+  });
+
+  it("cannot redeem the same token twice", async () => {
+    clearTools();
+    initializeAgent();
+
+    const user = await makeUser();
+    const { propose, redeem } = await import("../../services/agent/confirmation.js");
+    const action = await propose({
+      userId: user._id,
+      tool: getTool("create_playlist"),
+      input: { name: "Once" },
+    });
+
+    const ctx = { userId: user._id, consent: { moodTracking: true } };
+    const first = await redeem({ token: action.token, userId: user._id, ctx });
+    const second = await redeem({ token: action.token, userId: user._id, ctx });
+
+    // A double-tapped Confirm creates one playlist, not two.
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(false);
+    expect(await Playlist.countDocuments({ userId: user._id })).toBe(1);
+  });
+
+  it("will not let one person redeem another's confirmation", async () => {
+    clearTools();
+    initializeAgent();
+
+    const owner = await makeUser();
+    const attacker = await makeUser();
+    const { propose, redeem } = await import("../../services/agent/confirmation.js");
+
+    const action = await propose({
+      userId: owner._id,
+      tool: getTool("create_playlist"),
+      input: { name: "Theirs" },
+    });
+
+    const result = await redeem({
+      token: action.token,
+      userId: attacker._id,
+      ctx: { userId: attacker._id, consent: {} },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(await Playlist.countDocuments({})).toBe(0);
+  });
+
+  it("re-checks authorization at redemption, not only at proposal", async () => {
+    clearTools();
+    initializeAgent();
+
+    const owner = await makeUser();
+    const friend = await makeUser();
+    const playlist = await Playlist.create({
+      userId: owner._id,
+      name: "Shared",
+      songs: [],
+      collaborators: [friend._id],
+    });
+
+    const { propose, redeem } = await import("../../services/agent/confirmation.js");
+    const action = await propose({
+      userId: friend._id,
+      tool: getTool("add_song_to_playlist"),
+      input: { playlistId: playlist._id.toString(), songId: newId().toString() },
+    });
+
+    // Membership is revoked between the proposal and the confirmation.
+    await Playlist.updateOne({ _id: playlist._id }, { $set: { collaborators: [] } });
+
+    const result = await redeem({
+      token: action.token,
+      userId: friend._id,
+      ctx: { userId: friend._id, consent: {} },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/not yours/i);
+  });
+
+  it("declining leaves the token spent and nothing done", async () => {
+    clearTools();
+    initializeAgent();
+
+    const user = await makeUser();
+    const { decline, propose, redeem } = await import(
+      "../../services/agent/confirmation.js"
+    );
+
+    const action = await propose({
+      userId: user._id,
+      tool: getTool("create_playlist"),
+      input: { name: "No thanks" },
+    });
+
+    expect((await decline({ token: action.token, userId: user._id })).ok).toBe(true);
+
+    const after = await redeem({
+      token: action.token,
+      userId: user._id,
+      ctx: { userId: user._id, consent: {} },
+    });
+
+    expect(after.ok).toBe(false);
+    expect(await Playlist.countDocuments({})).toBe(0);
+  });
+
+  it("refuses a destructive tool on someone else's playlist", async () => {
+    clearTools();
+    initializeAgent();
+
+    const owner = await makeUser();
+    const friend = await makeUser();
+    const playlist = await Playlist.create({
+      userId: owner._id,
+      name: "Owned",
+      songs: [],
+      collaborators: [friend._id],
+    });
+
+    const { propose, redeem } = await import("../../services/agent/confirmation.js");
+    const action = await propose({
+      userId: friend._id,
+      tool: getTool("delete_playlist"),
+      input: { playlistId: playlist._id.toString() },
+    });
+
+    const result = await redeem({
+      token: action.token,
+      userId: friend._id,
+      ctx: { userId: friend._id, consent: {} },
+    });
+
+    // A collaborator can add songs; they cannot destroy the playlist.
+    expect(result.ok).toBe(false);
+    expect(await Playlist.countDocuments({ _id: playlist._id })).toBe(1);
+  });
+});

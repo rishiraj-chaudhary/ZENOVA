@@ -1,5 +1,8 @@
 import AgentRun from "../models/AgentRun.js";
 import Conversation from "../models/Conversation.js";
+import MemoryItem from "../models/MemoryItem.js";
+import PendingAction from "../models/PendingAction.js";
+import UserModel from "../models/UserModel.js";
 import AgentStep from "../models/AgentStep.js";
 import Impression from "../models/Impression.js";
 import ToolAudit from "../models/ToolAudit.js";
@@ -25,7 +28,18 @@ import { withTransaction } from "../utils/withTransaction.js";
  * both require that a user can obtain and erase it. Neither was possible before.
  */
 export const exportUserData = async (userId) => {
-  const [user, moods, feedback, outcomes, playlists, recommendations, gamification, badges] =
+  const [
+    user,
+    moods,
+    feedback,
+    outcomes,
+    playlists,
+    recommendations,
+    gamification,
+    badges,
+    memories,
+    profile,
+  ] =
     await Promise.all([
       User.findById(userId).lean(),
       MoodEntry.find({ userId }).sort({ recordedAt: 1 }).lean(),
@@ -35,6 +49,8 @@ export const exportUserData = async (userId) => {
       Recommendation.find({ userId }).sort({ generatedAt: 1 }).lean(),
       Gamification.findOne({ userId }).lean(),
       UserBadge.find({ userId }).populate("badgeId", "name description").lean(),
+      MemoryItem.find({ userId }).sort({ createdAt: 1 }).select("summary moodAtTime createdAt").lean(),
+      UserModel.findOne({ userId }).lean(),
     ]);
 
   if (!user) throw AppError.notFound("User not found");
@@ -88,6 +104,27 @@ export const exportUserData = async (userId) => {
       description: badgeId.description,
       earnedAt,
     })),
+
+    // Memory the user cannot read is a liability; memory they can read and
+    // delete is a feature.
+    assistantMemory: memories.map(({ summary, moodAtTime, createdAt }) => ({
+      summary,
+      moodAtTime,
+      createdAt,
+    })),
+    assistantProfile: profile
+      ? {
+          recurringStressors: profile.recurringStressors?.map((b) => ({
+            text: b.text, confidence: b.confidence, lastConfirmed: b.lastConfirmed,
+          })),
+          copingStrategiesThatWorked: profile.copingStrategiesThatWorked?.map((b) => ({
+            text: b.text, confidence: b.confidence, lastConfirmed: b.lastConfirmed,
+          })),
+          avoid: profile.avoid?.map((b) => ({
+            text: b.text, confidence: b.confidence, lastConfirmed: b.lastConfirmed,
+          })),
+        }
+      : null,
   };
 };
 
@@ -105,6 +142,9 @@ const eraseWellbeing = async (userId, session) => {
     Recommendation.deleteMany({ userId }, options),
     Impression.deleteMany({ userId }, options),
     Conversation.deleteOne({ userId }, options),
+    // What the assistant remembered is what the user said, in another shape.
+    MemoryItem.deleteMany({ userId }, options),
+    UserModel.deleteOne({ userId }, options),
   ]);
 
   // Counters derived from the records above are the same data in a different
@@ -166,6 +206,9 @@ export const deleteAccount = (userId) =>
       AgentRun.deleteMany({ userId }, options),
       AgentStep.deleteMany({ userId }, options),
       ToolAudit.deleteMany({ userId }, options),
+      PendingAction.deleteMany({ userId }, options),
+      MemoryItem.deleteMany({ userId }, options),
+      UserModel.deleteOne({ userId }, options),
 
       RefreshToken.deleteMany({ userId }, options),
       PlaylistInvitation.deleteMany(
