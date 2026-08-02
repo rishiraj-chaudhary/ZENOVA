@@ -95,7 +95,13 @@ const buildContext = ({ policy, tools, history, message, observations, memories,
     .join("\n");
 };
 
-export const runAgent = async ({ user, message, history = [], region }) => {
+export const runAgent = async ({
+  user,
+  message,
+  history = [],
+  region,
+  spotifyAccessToken,
+}) => {
   const budget = createBudget();
   const run = await startRun({ userId: user._id, message });
 
@@ -106,7 +112,13 @@ export const runAgent = async ({ user, message, history = [], region }) => {
     userId: user._id,
     timeZone: user.timeZone ?? "UTC",
     consent: { moodTracking: await hasMoodConsent(user._id) },
-    spotify: { connected: Boolean(user.spotifyId) },
+    spotify: {
+      connected: Boolean(user.spotifyId),
+      // Belongs to the browser's Spotify session, not ours. Carried on the
+      // context rather than passed as an argument, so it is never written into
+      // an AgentStep's recorded input.
+      accessToken: spotifyAccessToken ?? null,
+    },
     tainted: false,
     // Never true on a first pass. A change is proposed, the person agrees to
     // that specific proposal, and the token they get back is what carries it

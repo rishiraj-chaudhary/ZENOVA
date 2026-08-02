@@ -17,6 +17,27 @@ const tools = new Map();
 /** Anything with a side effect the user would notice if it happened by mistake. */
 export const MUTATING = new Set(["write", "destructive", "external"]);
 
+/**
+ * What a tainted run loses.
+ *
+ * Not everything mutating, and the distinction is deliberate. Every music tool
+ * returns track and artist names, which are third-party text — so a rule that
+ * removed all mutating tools on taint would mean the assistant could never play
+ * a song, ever. The feature and the control would be mutually exclusive.
+ *
+ * The taint rule exists because a run that has read someone else's text may be
+ * following someone else's instructions. There are two mitigations: remove the
+ * capability, or put a human in front of it. For an irreversible action, remove
+ * it — people rubber-stamp confirmations. For a reversible one whose summary
+ * names the exact thing that will happen, review is adequate.
+ *
+ * So `write` and `destructive` are withdrawn outright on a tainted run, and
+ * `external` may still be proposed. The worst an injected track name can then
+ * achieve is a confirmation dialogue offering to play a song the user did not
+ * ask for, which they can decline, and which stops when they stop it.
+ */
+export const BLOCKED_WHEN_TAINTED = new Set(["write", "destructive"]);
+
 export const registerTool = (definition) => {
   const required = ["name", "description", "sideEffect", "ownership", "handler"];
   for (const field of required) {
@@ -50,7 +71,7 @@ export const clearTools = () => tools.clear();
  * arriving through a collaborator's playlist name and being obeyed.
  */
 export const availableTools = ({ tainted = false } = {}) =>
-  listTools().filter((tool) => !(tainted && MUTATING.has(tool.sideEffect)));
+  listTools().filter((tool) => !(tainted && BLOCKED_WHEN_TAINTED.has(tool.sideEffect)));
 
 /** The model-facing schema list, which is all the model ever sees. */
 export const describeTools = (options) =>
@@ -120,6 +141,15 @@ export const validateInput = (tool, input = {}) => {
         return { valid: false, error: `${name} must be at most ${spec.maximum}` };
       }
       value[name] = spec.type === "integer" ? Math.round(parsed) : parsed;
+      continue;
+    }
+
+    if (spec.type === "array") {
+      if (!Array.isArray(given)) return { valid: false, error: `${name} must be a list` };
+      if (spec.maxItems && given.length > spec.maxItems) {
+        return { valid: false, error: `${name} may hold at most ${spec.maxItems} items` };
+      }
+      value[name] = given.slice(0, spec.maxItems ?? 50);
       continue;
     }
 

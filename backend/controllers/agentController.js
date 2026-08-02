@@ -24,6 +24,7 @@ export const chat = asyncHandler(async (req, res) => {
     message,
     history: conversation?.turns ?? [],
     region: resolveRegion(req),
+    spotifyAccessToken: req.headers["x-spotify-token"] ?? null,
   });
 
   await Conversation.appendTurn(req.user._id, { role: "user", content: message });
@@ -59,7 +60,10 @@ export const respondToAction = asyncHandler(async (req, res) => {
       userId: req.user._id,
       timeZone: req.user.timeZone ?? "UTC",
       consent: { moodTracking: req.user.consent?.moodTracking ?? false },
-      spotify: { connected: Boolean(req.user.spotifyId) },
+      spotify: {
+        connected: Boolean(req.user.spotifyId),
+        accessToken: req.headers["x-spotify-token"] ?? null,
+      },
       socketManager: req.socketManager,
       tainted: false,
     },

@@ -1,5 +1,5 @@
 import Playlist from "../../models/Playlist.js";
-import { MUTATING } from "./toolRegistry.js";
+import { BLOCKED_WHEN_TAINTED, MUTATING } from "./toolRegistry.js";
 
 /**
  * Whether this call is allowed, decided before the handler runs.
@@ -37,14 +37,17 @@ export const checkToolCall = async ({ tool, input, ctx }) => {
     if (scope === "moodTracking" && !ctx.consent?.moodTracking) {
       return denied("Mood tracking consent is required for this");
     }
-    if (scope === "spotify" && !ctx.spotify?.connected) {
-      return denied("A connected Spotify account is required for this");
+    if (scope === "spotify" && !ctx.spotify?.accessToken) {
+      return denied(
+        "Connect Spotify first — I need an active session to control playback"
+      );
     }
   }
 
-  // A run that has read third-party text cannot be trusted to be acting on its
-  // operator's instructions any more, so it loses everything that changes state.
-  if (ctx.tainted && MUTATING.has(tool.sideEffect)) {
+  // A tainted run loses anything irreversible. Playback survives because it is
+  // reversible and the confirmation names the exact track — see the reasoning
+  // on BLOCKED_WHEN_TAINTED in toolRegistry.
+  if (ctx.tainted && BLOCKED_WHEN_TAINTED.has(tool.sideEffect)) {
     return denied(
       "This conversation has read content written by someone else, so changes are disabled"
     );

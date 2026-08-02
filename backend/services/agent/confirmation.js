@@ -19,6 +19,24 @@ const SUMMARIES = {
   create_playlist: (input) => `Create a playlist called "${input.name}"`,
   add_song_to_playlist: () => "Add this song to your playlist",
   delete_playlist: () => "Permanently delete this playlist",
+  play_track: () => "Play this on your Spotify",
+  play_what_works: () => "Play what's worked for you before, and measure it",
+};
+
+/**
+ * Summaries that need to name a thing the user would recognise.
+ *
+ * `play_track` takes a song id, which means nothing to a person — so the
+ * proposal is enriched at creation time by looking the song up. Everything else
+ * can be described from its arguments alone.
+ */
+const enrich = async (toolName, input) => {
+  if (toolName !== "play_track" || !input.songId) return null;
+
+  const { default: MusicResource } = await import("../../models/MusicResource.js");
+  const song = await MusicResource.findById(input.songId).select("title artist").lean();
+
+  return song ? `Play "${song.title}" by ${song.artist}` : null;
 };
 
 export const summarise = (toolName, input) =>
@@ -32,7 +50,7 @@ export const propose = async ({ userId, runId, tool, input }) =>
     tool: tool.name,
     input,
     sideEffect: tool.sideEffect,
-    summary: summarise(tool.name, input),
+    summary: (await enrich(tool.name, input)) ?? summarise(tool.name, input),
   });
 
 /**

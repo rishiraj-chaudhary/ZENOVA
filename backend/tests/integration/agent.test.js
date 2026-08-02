@@ -476,3 +476,153 @@ describe("changes are proposed, then confirmed", () => {
     expect(await Playlist.countDocuments({ _id: playlist._id })).toBe(1);
   });
 });
+
+describe("playing what has been measured to work", () => {
+  const seedProven = async (userId, { title, delta, sessions }) => {
+    const { default: MusicResource } = await import("../../models/MusicResource.js");
+    const { default: SessionOutcome } = await import("../../models/SessionOutcome.js");
+
+    const song = await MusicResource.create({
+      title,
+      artist: "Measured",
+      genre: "ambient",
+      duration: 180,
+      audioUrl: "https://example.com/a.mp3",
+      spotifyUri: "spotify:track:abc123",
+    });
+
+    for (let i = 0; i < sessions; i += 1) {
+      await SessionOutcome.create({
+        userId,
+        sessionId: newId(),
+        moodBefore: 2,
+        moodAfter: 2 + delta,
+        songsPlayed: [song._id],
+        completedAt: new Date(),
+      });
+    }
+
+    return song;
+  };
+
+  it("refuses playback without a live Spotify session", async () => {
+    clearTools();
+    initializeAgent();
+
+    const result = await checkToolCall({
+      tool: getTool("play_track"),
+      input: { songId: newId().toString() },
+      ctx: {
+        userId: newId(),
+        confirmed: true,
+        consent: { moodTracking: true },
+        // Linked account, but no active token — a connected account is not a
+        // usable session.
+        spotify: { connected: true, accessToken: null },
+      },
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/connect spotify/i);
+  });
+
+  it("still requires confirmation before any audio starts", async () => {
+    clearTools();
+    initializeAgent();
+
+    const result = await checkToolCall({
+      tool: getTool("play_track"),
+      input: { songId: newId().toString() },
+      ctx: {
+        userId: newId(),
+        confirmed: false,
+        consent: { moodTracking: true },
+        spotify: { connected: true, accessToken: "token" },
+      },
+    });
+
+    // Audio starting unannounced is jarring; the dialogue names the track.
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toMatch(/confirm/i);
+  });
+
+  it("names the actual track in the confirmation, not the song id", async () => {
+    clearTools();
+    initializeAgent();
+
+    const user = await makeUser();
+    const song = await seedProven(user._id, { title: "Weightless", delta: 2, sessions: 8 });
+
+    const { propose } = await import("../../services/agent/confirmation.js");
+    const action = await propose({
+      userId: user._id,
+      tool: getTool("play_track"),
+      input: { songId: song._id.toString() },
+    });
+
+    // A song id means nothing to a person agreeing to something.
+    expect(action.summary).toBe('Play "Weightless" by Measured');
+  });
+
+  it("keeps playback available on a tainted run", () => {
+    clearTools();
+    initializeAgent();
+
+    const tainted = availableTools({ tainted: true }).map((tool) => tool.name);
+
+    // Every music tool returns track names, so a rule that withdrew everything
+    // mutating on taint would make playing a song permanently impossible.
+    expect(tainted).toContain("play_track");
+    expect(tainted).not.toContain("delete_playlist");
+    expect(tainted).not.toContain("create_playlist");
+  });
+
+  it("says what is missing rather than playing something unmeasured", async () => {
+    clearTools();
+    initializeAgent();
+
+    const user = await makeUser();
+
+    await expect(
+      dispatch(
+        getTool("play_what_works"),
+        { startingMood: 2 },
+        { userId: user._id, spotify: { accessToken: "token" }, timeZone: "UTC" }
+      )
+    ).rejects.toThrow(/nothing has been measured/i);
+  });
+
+  it("finds a catalogue song by title or artist", async () => {
+    clearTools();
+    initializeAgent();
+
+    const user = await makeUser();
+    await seedProven(user._id, { title: "Weightless", delta: 2, sessions: 1 });
+
+    const byTitle = await dispatch(
+      getTool("search_catalog"),
+      { query: "weightless", limit: 5 },
+      { userId: user._id }
+    );
+
+    expect(byTitle.results[0].title).toBe("Weightless");
+    expect(byTitle.results[0].playableOnSpotify).toBe(true);
+  });
+
+  it("does not let a search term be read as a pattern", async () => {
+    clearTools();
+    initializeAgent();
+
+    const user = await makeUser();
+    await seedProven(user._id, { title: "Weightless", delta: 2, sessions: 1 });
+
+    // An unescaped ".*" would match everything in the catalogue.
+    const result = await dispatch(
+      getTool("search_catalog"),
+      { query: ".*", limit: 5 },
+      { userId: user._id }
+    );
+
+    expect(result.results).toEqual([]);
+  });
+});
