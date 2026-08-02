@@ -33,6 +33,7 @@ import geminiRoutes from "./routes/geminiRoutes.js";
 import leaderboardRoutes from "./routes/leaderboardRoutes.js";
 import musicRoutes from "./routes/musicRoutes.js";
 import opsRoutes from "./routes/opsRoutes.js";
+import planRoutes from "./routes/planRoutes.js";
 import playlistRoutes from "./routes/playlistRoutes.js";
 import privacyRoutes from "./routes/privacyRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
@@ -148,6 +149,7 @@ const configureApp = () => {
   app.use("/api/auth", authRoutes);
   app.use("/api/agent", agentRoutes);
   app.use("/api/ops", opsRoutes);
+  app.use("/api/plans", planRoutes);
   app.use("/api/music/recommend", musicRoutes);
   app.use("/api/users", userRoutes);
   app.use("/api/gemini", geminiRoutes);

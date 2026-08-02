@@ -19,7 +19,7 @@ export const RISK_LEVELS = {
  * Deliberately over-inclusive: a false positive shows someone a helpline they
  * did not need, a false negative does not show one to someone who did.
  */
-const CRISIS_PATTERNS = [
+export const CRISIS_PATTERNS = [
   /\bkill(ing)?\s+my\s?self\b/i,
   /\bkys\b/i,
   /\bunalive\b/i,
@@ -49,7 +49,7 @@ const CRISIS_PATTERNS = [
   /\b(last|final)\s+(night|day|playlist|song)\s+(i|for\s+me)\b/i,
 ];
 
-const ELEVATED_PATTERNS = [
+export const ELEVATED_PATTERNS = [
   /\bhopeless\b/i,
   /\bworthless\b/i,
   /\bcan'?t\s+(go\s+on|take\s+(it|this)\s+anymore|cope)\b/i,

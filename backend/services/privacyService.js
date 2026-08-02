@@ -9,6 +9,9 @@ import AgentStep from "../models/AgentStep.js";
 import Impression from "../models/Impression.js";
 import ToolAudit from "../models/ToolAudit.js";
 import ListeningEvent from "../models/ListeningEvent.js";
+import ListeningPlan from "../models/ListeningPlan.js";
+import PlanBehaviour from "../models/PlanBehaviour.js";
+import PlanStep from "../models/PlanStep.js";
 import ListeningFeedback from "../models/ListeningFeedback.js";
 import Leaderboard from "../models/Leaderboard.js";
 import PlaylistInvitation from "../models/PlaylistInvitation.js";
@@ -216,6 +219,9 @@ export const deleteAccount = (userId) =>
       ListeningEvent.deleteMany({ userId }, options),
       SpotifyPersona.deleteOne({ userId }, options),
       SafetyPlan.deleteOne({ userId }, options),
+      ListeningPlan.deleteMany({ userId }, options),
+      PlanStep.deleteMany({ userId }, options),
+      PlanBehaviour.deleteMany({ userId }, options),
 
       RefreshToken.deleteMany({ userId }, options),
       PlaylistInvitation.deleteMany(

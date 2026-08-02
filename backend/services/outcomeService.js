@@ -7,6 +7,8 @@ import { awardPoints } from "./pointsService.js";
 import { recordSessionEffect } from "./songEffectService.js";
 import Impression from "../models/Impression.js";
 import { contextOf, liftOf, recordBaselineObservation } from "./baselineService.js";
+import PlanStep from "../models/PlanStep.js";
+import logger from "../utils/logger.js";
 
 /**
  * Opens an outcome record when a listening session starts.
@@ -142,6 +144,17 @@ export const completeSession = async ({
 
   outcome.lift = lift;
   await outcome.save();
+
+  // If this session was a plan's step, closing the step is what makes adherence
+  // mean something. Failing to link must never fail the measurement itself.
+  try {
+    await PlanStep.findOneAndUpdate(
+      { userId, sessionId, status: "pending" },
+      { status: "done", outcomeId: outcome._id, completedAt: new Date() }
+    );
+  } catch (error) {
+    logger.warn("could not close a plan step", { detail: error.message });
+  }
 
   // The behaviour the reward table now exists to encourage. Keyed on the
   // session, so re-submitting a rating cannot pay twice.

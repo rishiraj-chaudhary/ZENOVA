@@ -21,6 +21,8 @@ const SUMMARIES = {
   delete_playlist: () => "Permanently delete this playlist",
   play_track: () => "Play this on your Spotify",
   play_what_works: () => "Play what's worked for you before, and measure it",
+  pause_plan: () => "Pause your plan",
+  stop_plan: () => "End your plan",
 };
 
 /**

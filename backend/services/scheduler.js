@@ -1,4 +1,5 @@
 import { runCompaction } from "./memory/compaction.js";
+import { adaptAllPlans, completeFinishedPlans } from "./plans/planAdaptation.js";
 import { rebuildNoListenBaseline } from "./baselineService.js";
 import logger from "../utils/logger.js";
 
@@ -18,6 +19,17 @@ const JOBS = [
     name: "no-listen baseline",
     everyMs: 6 * HOUR,
     run: () => rebuildNoListenBaseline(),
+  },
+  {
+    name: "plan adaptation",
+    everyMs: 12 * HOUR,
+    run: async () => {
+      const [{ completed }, adapted] = await Promise.all([
+        completeFinishedPlans(),
+        adaptAllPlans(),
+      ]);
+      return { completed, ...adapted };
+    },
   },
   {
     name: "memory compaction",

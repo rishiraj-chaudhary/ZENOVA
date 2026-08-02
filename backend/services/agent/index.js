@@ -1,4 +1,5 @@
 import { registerReadTools } from "./tools/readTools.js";
+import { registerPlanTools } from "./tools/planTools.js";
 import { registerPlaybackTools } from "./tools/playbackTools.js";
 import { registerWriteTools } from "./tools/writeTools.js";
 import { clearTools, listTools } from "./toolRegistry.js";
@@ -18,6 +19,7 @@ export const initializeAgent = () => {
   registerReadTools();
   registerWriteTools();
   registerPlaybackTools();
+  registerPlanTools();
   return listTools().length;
 };
 

@@ -12,6 +12,7 @@ import geminiRoutes from "../../routes/geminiRoutes.js";
 import leaderboardRoutes from "../../routes/leaderboardRoutes.js";
 import musicRoutes from "../../routes/musicRoutes.js";
 import opsRoutes from "../../routes/opsRoutes.js";
+import planRoutes from "../../routes/planRoutes.js";
 import playlistRoutes from "../../routes/playlistRoutes.js";
 import privacyRoutes from "../../routes/privacyRoutes.js";
 import userRoutes from "../../routes/userRoutes.js";
@@ -34,6 +35,7 @@ export const buildTestApp = () => {
   app.use("/api/auth", authRoutes);
   app.use("/api/agent", agentRoutes);
   app.use("/api/ops", opsRoutes);
+  app.use("/api/plans", planRoutes);
   app.use("/api/users", userRoutes);
   // Mounted so the recommendation and crisis paths are reachable. Omitting
   // them left the entire AI pipeline — including every safety surface —

@@ -26,6 +26,7 @@ const Assistant = lazy(() => import("./pages/Assistant.jsx"));
 const Gamification = lazy(() => import("./pages/Gamification.jsx"));
 const Insights = lazy(() => import("./pages/Insights.jsx"));
 const InviteAccept = lazy(() => import("./pages/InviteAccept.jsx"));
+const Plan = lazy(() => import("./pages/Plan.jsx"));
 const Playlist = lazy(() => import("./pages/Playlist.jsx"));
 const Profile = lazy(() => import("./pages/Profile.jsx"));
 const Settings = lazy(() => import("./pages/Settings.jsx"));
@@ -78,6 +79,7 @@ const AppRoutes = () => {
               {[
                 ["/assistant", <Assistant />],
                 ["/profile", <Profile />],
+                ["/plan", <Plan />],
                 ["/playlist", <Playlist />],
                 ["/insights", <Insights />],
                 ["/gamification", <Gamification />],
