@@ -180,10 +180,10 @@ export const registerWriteTools = () => {
       required: ["playlistId"],
     },
     sideEffect: "destructive",
-    ownership: "self",
+    // Checked in toolAuth before dispatch, not here. The handler still scopes
+    // its own query as defence in depth, but the guarantee lives one layer up.
+    ownership: "playlist-owner",
     handler: async ({ playlistId }, ctx) => {
-      // Ownership, not membership: a collaborator must not be able to destroy
-      // somebody else's playlist through the assistant.
       const deleted = await Playlist.findOneAndDelete({
         _id: playlistId,
         userId: ctx.userId,

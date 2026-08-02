@@ -16,6 +16,13 @@ import { MUTATING } from "./toolRegistry.js";
  *     playlist" is answered by asking the database for a document matching both
  *     the id and the membership, so a caller who is not a member cannot even
  *     read it.
+ *
+ * The red-team suite caught the second rule being broken the first time it ran:
+ * delete_playlist declared `ownership: "self"`, which meant no check happened
+ * here at all and the guarantee rested entirely on the handler remembering to
+ * scope its own query. That is exactly the "one will eventually be missed"
+ * failure this layer exists to prevent, so destructive playlist tools now
+ * declare `playlist-owner` and are checked here like everything else.
  */
 
 const denied = (reason) => ({ allowed: false, reason });
@@ -47,16 +54,23 @@ export const checkToolCall = async ({ tool, input, ctx }) => {
     return denied("This needs the user to confirm it first");
   }
 
-  if (tool.ownership === "playlist-member") {
+  if (tool.ownership === "playlist-member" || tool.ownership === "playlist-owner") {
     const playlistId = input.playlistId;
     if (!playlistId) return denied("This needs a playlist");
 
-    const member = await Playlist.exists({
-      _id: playlistId,
-      $or: [{ userId: ctx.userId }, { collaborators: ctx.userId }],
-    });
+    // Owner-only for anything destructive: a collaborator may add songs and
+    // must not be able to destroy somebody else's playlist. Expressed as a
+    // query rather than a comparison, so a caller who does not qualify cannot
+    // even read the document.
+    const filter =
+      tool.ownership === "playlist-owner"
+        ? { _id: playlistId, userId: ctx.userId }
+        : {
+            _id: playlistId,
+            $or: [{ userId: ctx.userId }, { collaborators: ctx.userId }],
+          };
 
-    if (!member) return denied("That playlist is not yours");
+    if (!(await Playlist.exists(filter))) return denied("That playlist is not yours");
   }
 
   return allowed;

@@ -285,7 +285,9 @@ describe("the tool catalogue", () => {
 
     for (const tool of availableTools()) {
       expect(["read", "write", "destructive", "external"]).toContain(tool.sideEffect);
-      expect(["self", "playlist-member", "public"]).toContain(tool.ownership);
+      expect(["self", "playlist-member", "playlist-owner", "public"]).toContain(
+        tool.ownership
+      );
     }
   });
 
