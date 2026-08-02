@@ -2,10 +2,12 @@ import AgentRun from "../models/AgentRun.js";
 import Conversation from "../models/Conversation.js";
 import MemoryItem from "../models/MemoryItem.js";
 import PendingAction from "../models/PendingAction.js";
+import SpotifyPersona from "../models/SpotifyPersona.js";
 import UserModel from "../models/UserModel.js";
 import AgentStep from "../models/AgentStep.js";
 import Impression from "../models/Impression.js";
 import ToolAudit from "../models/ToolAudit.js";
+import ListeningEvent from "../models/ListeningEvent.js";
 import ListeningFeedback from "../models/ListeningFeedback.js";
 import Leaderboard from "../models/Leaderboard.js";
 import PlaylistInvitation from "../models/PlaylistInvitation.js";
@@ -209,6 +211,9 @@ export const deleteAccount = (userId) =>
       PendingAction.deleteMany({ userId }, options),
       MemoryItem.deleteMany({ userId }, options),
       UserModel.deleteOne({ userId }, options),
+      // Passive listening history and the taste profile derived from it.
+      ListeningEvent.deleteMany({ userId }, options),
+      SpotifyPersona.deleteOne({ userId }, options),
 
       RefreshToken.deleteMany({ userId }, options),
       PlaylistInvitation.deleteMany(
