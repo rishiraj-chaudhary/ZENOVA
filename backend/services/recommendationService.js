@@ -15,7 +15,8 @@ import {
   buildCrisisResponse,
 } from "./safetyService.js";
 import { findTrack } from "./spotifyService.js";
-import { rankByMeasuredEffect } from "./songEffectService.js";
+import { rankWithExploration } from "./banditService.js";
+import { explorationTemperature, getPersona } from "./personaService.js";
 import { buildTasteProfile, getSkippedSongTitles } from "./tasteService.js";
 import { loadTherapyProfile } from "./userProfileService.js";
 import logger from "../utils/logger.js";
@@ -44,14 +45,31 @@ const buildYouTubeSearchUrl = (title, artist) => {
  * be contaminated by exactly the signal it exists to isolate.
  */
 const loadPersonalizationContext = async (userId, startingMood, arm = "policy") => {
+  const persona = await getPersona(userId);
+  const temperature = explorationTemperature(persona);
+
   const [profile, taste, avoidSongs, provenSongs] = await Promise.all([
     loadTherapyProfile(userId),
     buildTasteProfile(userId),
     getSkippedSongTitles(userId),
-    arm === "control" ? [] : loadProvenSongs(startingMood),
+    arm === "control" ? [] : loadProvenSongs(startingMood, { temperature }),
   ]);
 
-  return { ...profile, taste, avoidSongs, provenSongs };
+  return {
+    ...profile,
+    taste,
+    avoidSongs,
+    provenSongs,
+    persona,
+    temperature,
+    // Keyed by song so the impression log can record the real probability
+    // rather than a placeholder.
+    provenPropensities: Object.fromEntries(
+      provenSongs
+        .filter((song) => song.musicId && song.propensity)
+        .map((song) => [song.musicId.toString(), song.propensity])
+    ),
+  };
 };
 
 /**
@@ -61,11 +79,27 @@ const loadPersonalizationContext = async (userId, startingMood, arm = "policy") 
  * product should recommend from measurement where it has it and fall back to
  * the model where it does not, rather than claiming an effect it cannot show.
  */
-const loadProvenSongs = async (startingMood) => {
+const loadProvenSongs = async (startingMood, { temperature } = {}) => {
   if (!startingMood) return [];
 
   try {
-    const ranked = await rankByMeasuredEffect(startingMood, { limit: 8 });
+    // Sampled from the posterior rather than sorted by it. Ranking on the mean
+    // is pure exploitation — a song that has never been tried can never rise,
+    // so the ledger only ever learns about songs it already likes. Sampling
+    // lets uncertainty earn a turn, and the temperature comes from how
+    // adventurous this person's own listening is.
+    const { ranked, suppressed } = await rankWithExploration(startingMood, {
+      temperature,
+      limit: 8,
+    });
+
+    if (suppressed.length > 0) {
+      logger.info("suppressed songs with measured negative effect", {
+        startingMood,
+        count: suppressed.length,
+      });
+    }
+
     if (ranked.length === 0) return [];
 
     const songs = await MusicResource.find({
@@ -297,6 +331,9 @@ export const generateRecommendations = async ({
     userId,
     sessionId: recommendation._id,
     recommendations,
+    // Real sampled probabilities where the ledger drove the choice; uniform
+    // where the model did. Logging the true value is the whole point.
+    propensities: userProfile.provenPropensities,
     arm,
     startingMood,
     detectedMood: mayStoreMood ? detectedMood : undefined,

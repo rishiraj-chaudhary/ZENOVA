@@ -9,14 +9,27 @@ const TOKEN_ENDPOINT = "https://accounts.spotify.com/api/token";
 const AUTHORIZE_ENDPOINT = "https://accounts.spotify.com/authorize";
 const TOKEN_REFRESH_MARGIN_MS = 60 * 1000;
 
+/**
+ * What we ask Spotify for.
+ *
+ * `user-read-private` carries the `product` field, which is how Premium is
+ * detected — and Premium is the difference between full playback and a
+ * 30-second preview. `user-read-recently-played` is the one that compounds:
+ * polled over weeks it becomes a listening history Spotify will not hand over
+ * in a single call.
+ */
 const USER_SCOPES = [
   "streaming",
   "user-read-email",
   "user-read-private",
   "user-modify-playback-state",
   "user-read-playback-state",
+  "user-read-recently-played",
+  "user-top-read",
   "user-library-read",
+  "user-library-modify",
   "playlist-read-private",
+  "playlist-modify-private",
 ];
 
 const spotifyApi = new SpotifyWebApi({
@@ -164,6 +177,123 @@ export const refreshUserToken = (refreshToken) =>
  * This is what makes "Sign in with Spotify" a sign-in rather than a token
  * exchange: without it the callback had tokens but no idea whose they were.
  */
+/** A user-token request, with Spotify's own rate limiting respected. */
+const spotifyGet = async (path, accessToken, params = {}) => {
+  try {
+    const { data } = await axios.get(`https://api.spotify.com/v1${path}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      params,
+      timeout: 8000,
+    });
+    return data;
+  } catch (error) {
+    // 429 carries Retry-After. Surfacing it lets the caller back off rather
+    // than hammering and getting banned.
+    if (error.response?.status === 429) {
+      const retryAfter = Number(error.response.headers["retry-after"] ?? 5);
+      throw Object.assign(new Error("Spotify rate limited"), { retryAfter });
+    }
+    throw error;
+  }
+};
+
+/**
+ * The user's recent plays.
+ *
+ * Only 50 items deep, but it is a stream: polled every half hour and
+ * accumulated, it becomes a longitudinal record of what somebody reached for
+ * unprompted — observational data with no recommendation in the loop, which is
+ * exactly what the causal work needs and what a recommender cannot manufacture.
+ */
+export const fetchRecentlyPlayed = async (accessToken, { after } = {}) => {
+  const data = await spotifyGet("/me/player/recently-played", accessToken, {
+    limit: 50,
+    ...(after ? { after } : {}),
+  });
+
+  return (data.items ?? []).map((item) => ({
+    spotifyTrackId: item.track.id,
+    title: item.track.name,
+    artist: item.track.artists?.[0]?.name ?? null,
+    artistIds: (item.track.artists ?? []).map((artist) => artist.id),
+    popularity: item.track.popularity ?? null,
+    releaseYear: Number.parseInt(item.track.album?.release_date?.slice(0, 4), 10) || null,
+    durationMs: item.track.duration_ms ?? null,
+    playedAt: new Date(item.played_at),
+  }));
+};
+
+/**
+ * Genres for a batch of artists.
+ *
+ * Batched to 50 and worth caching hard — an artist's genres essentially never
+ * change, and this is the only place genre comes from now that the audio
+ * endpoints are gone.
+ */
+const genreCache = new Map();
+
+export const fetchArtistGenres = async (artistIds, accessToken) => {
+  const unknown = [...new Set(artistIds)].filter((id) => id && !genreCache.has(id));
+
+  for (let i = 0; i < unknown.length; i += 50) {
+    const batch = unknown.slice(i, i + 50);
+    try {
+      const data = await spotifyGet("/artists", accessToken, { ids: batch.join(",") });
+      for (const artist of data.artists ?? []) {
+        genreCache.set(artist.id, artist.genres ?? []);
+      }
+    } catch (error) {
+      logger.debug("artist genre lookup failed", { detail: error.message });
+      for (const id of batch) genreCache.set(id, []);
+    }
+  }
+
+  return Object.fromEntries(
+    [...new Set(artistIds)].map((id) => [id, genreCache.get(id) ?? []])
+  );
+};
+
+/** Devices Spotify can currently play on — including the user's phone. */
+export const fetchDevices = async (accessToken) => {
+  const data = await spotifyGet("/me/player/devices", accessToken);
+  return data.devices ?? [];
+};
+
+/**
+ * Starts playback on a device.
+ *
+ * Works for free accounts too, as long as something else is already active —
+ * which is why "play on your phone" is offered before falling back to a
+ * 30-second preview. That is a materially better free-tier experience than a
+ * preview ladder alone.
+ */
+export const startPlayback = async (accessToken, { deviceId, uris }) => {
+  await axios.put(
+    "https://api.spotify.com/v1/me/player/play",
+    { uris },
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+      params: deviceId ? { device_id: deviceId } : {},
+      timeout: 8000,
+    }
+  );
+
+  return { started: true };
+};
+
+/** What is playing right now, which is how a skip becomes observable. */
+export const fetchPlaybackState = async (accessToken) => {
+  const data = await spotifyGet("/me/player", accessToken);
+  if (!data) return null;
+
+  return {
+    trackId: data.item?.id ?? null,
+    progressMs: data.progress_ms ?? 0,
+    durationMs: data.item?.duration_ms ?? null,
+    isPlaying: Boolean(data.is_playing),
+  };
+};
+
 export const fetchSpotifyProfile = async (accessToken) => {
   try {
     const { data } = await axios.get("https://api.spotify.com/v1/me", {
@@ -175,6 +305,10 @@ export const fetchSpotifyProfile = async (accessToken) => {
       email: data.email ?? null,
       displayName: data.display_name ?? null,
       avatarUrl: data.images?.[0]?.url ?? null,
+      // "premium" | "free" | "open" — decides whether full playback is possible
+      // at all, and therefore which rung of the playback ladder to offer.
+      product: data.product ?? null,
+      country: data.country ?? null,
     };
   } catch (error) {
     logger.error("Spotify profile request failed", {

@@ -46,6 +46,7 @@ export const recordImpressions = async ({
   userId,
   sessionId,
   recommendations,
+  propensities,
   arm,
   startingMood,
   detectedMood,
@@ -55,11 +56,17 @@ export const recordImpressions = async ({
 
   const { hourOfDay, dayOfWeek } = contextOf(new Date(), timeZone);
 
-  // The ranker is deterministic today, so every served candidate had the same
-  // probability of appearing. Logged anyway — the estimators are written
-  // against a field that has always existed, and nothing needs backfilling when
-  // sampling arrives.
-  const propensity = 1 / recommendations.length;
+  /**
+   * The true probability this candidate was served with.
+   *
+   * Sampled candidates carry their own, estimated by simulation in
+   * banditService. Anything the model chose rather than the ledger falls back
+   * to uniform, which is honest: with no sampling involved, every candidate in
+   * that list was equally likely to be there.
+   */
+  const uniform = 1 / recommendations.length;
+  const propensityFor = (song) =>
+    propensities?.[song.musicId?.toString()] ?? uniform;
 
   try {
     await Impression.insertMany(
@@ -68,7 +75,7 @@ export const recordImpressions = async ({
         musicId: song.musicId,
         sessionId,
         position,
-        propensity,
+        propensity: propensityFor(song),
         policyVersion: arm === "control" ? "control-random-v1" : POLICY_VERSION,
         arm,
         context: { startingMood, detectedMood, hourOfDay, dayOfWeek },

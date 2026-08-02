@@ -5,12 +5,21 @@ import {
   linkSpotifyAccount,
 } from "../services/authService.js";
 import { generateRecommendations } from "../services/recommendationService.js";
+import { syncListeningHistory } from "../services/listeningStreamService.js";
+import {
+  explorationTemperature,
+  derivePersona,
+  getPersona,
+  peakListeningHour,
+} from "../services/personaService.js";
 import {
   buildAuthorizeUrl,
   buildEmbedUrl,
   exchangeAuthorizationCode,
+  fetchDevices,
   fetchSpotifyProfile,
   refreshUserToken,
+  startPlayback,
 } from "../services/spotifyService.js";
 import AppError from "../utils/AppError.js";
 import asyncHandler from "../utils/asyncHandler.js";
@@ -99,6 +108,84 @@ export const handleSpotifyCallback = asyncHandler(async (req, res) => {
   req.session.user = session.user;
 
   res.json({ ...tokens, ...session, created });
+});
+
+/**
+ * Where this person can actually hear a full track right now.
+ *
+ * The ladder is Premium in-browser, then any other active device — a phone with
+ * Spotify open counts, and works on a free account — then the 30-second
+ * preview. Offering "play on your phone" before falling back to a preview is a
+ * materially better free-tier experience than the preview alone.
+ */
+export const getPlaybackOptions = asyncHandler(async (req, res) => {
+  const accessToken = req.headers["x-spotify-token"];
+  if (!accessToken) return res.json({ connected: false, devices: [] });
+
+  try {
+    const [profile, devices] = await Promise.all([
+      fetchSpotifyProfile(accessToken),
+      fetchDevices(accessToken),
+    ]);
+
+    res.json({
+      connected: true,
+      premium: profile.product === "premium",
+      devices: devices.map(({ id, name, type, is_active: isActive }) => ({
+        id,
+        name,
+        type,
+        isActive,
+      })),
+    });
+  } catch {
+    res.json({ connected: false, devices: [] });
+  }
+});
+
+export const playOnDevice = asyncHandler(async (req, res) => {
+  const accessToken = req.headers["x-spotify-token"];
+  if (!accessToken) throw AppError.badRequest("Connect Spotify first");
+
+  const { deviceId, uris } = req.body;
+  res.json(await startPlayback(accessToken, { deviceId, uris }));
+});
+
+/** Pulls this user's recent plays now, rather than waiting for the poller. */
+export const syncListening = asyncHandler(async (req, res) => {
+  const accessToken = req.headers["x-spotify-token"];
+  if (!accessToken) throw AppError.badRequest("Connect Spotify first");
+
+  const result = await syncListeningHistory(req.user, accessToken);
+  const persona = result.synced > 0 ? await derivePersona(req.user._id) : await getPersona(req.user._id);
+
+  res.json({ ...result, persona });
+});
+
+export const getMyPersona = asyncHandler(async (req, res) => {
+  const persona = await getPersona(req.user._id);
+
+  if (!persona) {
+    return res.json({
+      persona: null,
+      message: "Connect Spotify and listen for a while — this builds from real history.",
+    });
+  }
+
+  res.json({
+    persona: {
+      topGenres: persona.topGenres,
+      topArtists: persona.topArtists,
+      // Reported as what it drives, not as a claim about the person.
+      adventurousness: persona.entropy,
+      explorationTemperature: explorationTemperature(persona),
+      tasteDrift: persona.tasteDrift,
+      mainstreamIndex: persona.mainstreamIndex,
+      peakHour: peakListeningHour(persona),
+      basedOnPlays: persona.sampleSize,
+      refreshedAt: persona.refreshedAt,
+    },
+  });
 });
 
 export const refreshSpotifyToken = asyncHandler(async (req, res) => {

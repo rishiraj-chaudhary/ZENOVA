@@ -19,6 +19,7 @@ import errorHandler from "./middlewares/errorHandler.js";
 import notFoundHandler from "./middlewares/notFoundHandler.js";
 import requestLogger from "./middlewares/requestLogger.js";
 import { initializeAgent } from "./services/agent/index.js";
+import { startScheduledJobs } from "./services/scheduler.js";
 import { initializeDefaultBadges } from "./services/badgeService.js";
 import { authenticateSocket } from "./services/socketAuth.js";
 import SocketManager from "./services/socketManager.js";
@@ -207,6 +208,11 @@ const start = async () => {
   configureApp();
   await initializeDefaultBadges();
   logger.info("agent tools registered", { count: initializeAgent() });
+
+  // Scheduled work runs on the Mongo-backed lock, so several instances cannot
+  // duplicate it. No queue and no scheduler dependency — the primitive is
+  // already in this codebase and already proven by the leaderboard rebuild.
+  startScheduledJobs();
   startMetricsReporter();
 
   server.listen(config.port, () => {
