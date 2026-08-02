@@ -19,7 +19,12 @@ export const PROVISIONAL_OBSERVATIONS = 5;
  * measured change, because per-track attribution needs listen telemetry the
  * player does not yet report. Coarse and honest beats precise and invented.
  */
-export const recordSessionEffect = async ({ songIds, moodBefore, moodAfter }) => {
+export const recordSessionEffect = async ({
+  songIds,
+  moodBefore,
+  moodAfter,
+  arousalBefore = null,
+}) => {
   if (!songIds?.length || moodBefore == null || moodAfter == null) return 0;
 
   const delta = moodAfter - moodBefore;
@@ -27,10 +32,14 @@ export const recordSessionEffect = async ({ songIds, moodBefore, moodAfter }) =>
 
   const operations = songIds.map((musicId) => ({
     updateOne: {
-      filter: { musicId, startingMood: moodBefore },
+      // The filter has to name every field in the unique index, or the upsert
+      // and the index disagree about which document a write belongs to and
+      // concurrent sessions lose observations.
+      filter: { musicId, startingMood: moodBefore, startingArousal: arousalBefore },
       update: {
         $inc: { observations: 1, sumDelta: delta, sumSquaredDelta: delta * delta },
         $set: { lastObservedAt: now },
+        $setOnInsert: { startingArousal: arousalBefore },
       },
       upsert: true,
     },
@@ -102,9 +111,15 @@ const summarise = (cell) => {
  * five observations should not outrank one averaging +1.0 from sixty, and
  * shrinkage toward a zero-effect prior encodes exactly that.
  */
-export const rankByMeasuredEffect = async (startingMood, { limit = 20 } = {}) => {
+export const rankByMeasuredEffect = async (
+  startingMood,
+  { limit = 20, startingArousal } = {}
+) => {
   const cells = await SongEffect.find({
     startingMood,
+    // Undefined means "any arousal", which is what a 1-D caller wants. An
+    // explicit value narrows to observations from listeners in the same state.
+    ...(startingArousal === undefined ? {} : { startingArousal }),
     observations: { $gte: PROVISIONAL_OBSERVATIONS },
   })
     .sort({ observations: -1 })

@@ -19,7 +19,14 @@ const truncate = (text = "", maxLength = MAX_CONTEXT_LENGTH) =>
  * Failures are logged and swallowed: mood history is analytics, and losing one
  * entry must never fail the conversation the user is actually having.
  */
-export const recordMood = async ({ userId, mood, context, source, intensity }) => {
+export const recordMood = async ({
+  userId,
+  mood,
+  context,
+  source,
+  intensity,
+  arousal = null,
+}) => {
   if (!userId || !mood) return null;
 
   try {
@@ -31,6 +38,10 @@ export const recordMood = async ({ userId, mood, context, source, intensity }) =
       context: truncate(context),
       source,
       intensity,
+      // valence mirrors intensity so the 2-D field is populated from day one
+      // and a later migration is not needed; arousal stays null unless given.
+      valence: intensity ?? null,
+      arousal,
     });
   } catch (error) {
     logger.error("Failed to record mood:", error.message);

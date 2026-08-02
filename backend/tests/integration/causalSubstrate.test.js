@@ -5,6 +5,7 @@ import Impression from "../../models/Impression.js";
 import MoodEntry from "../../models/MoodEntry.js";
 import Recommendation from "../../models/Recommendation.js";
 import SessionOutcome from "../../models/SessionOutcome.js";
+import SongEffect from "../../models/SongEffect.js";
 import User from "../../models/user.js";
 import {
   baselineFor,
@@ -15,6 +16,10 @@ import {
 } from "../../services/baselineService.js";
 import { completeSession, startSession } from "../../services/outcomeService.js";
 import { assignArm, recordImpressions } from "../../services/policyService.js";
+import {
+  rankByMeasuredEffect,
+  recordSessionEffect,
+} from "../../services/songEffectService.js";
 import { clearTestDb, connectTestDb, disconnectTestDb } from "../helpers/db.js";
 
 const newId = () => new mongoose.Types.ObjectId();
@@ -347,5 +352,77 @@ describe("context is the user's, not the server's", () => {
     expect(contextOf(at, "UTC").dayOfWeek).not.toBe(
       contextOf(at, "Asia/Kolkata").dayOfWeek
     );
+  });
+});
+
+describe("the arousal axis, added without breaking the old one", () => {
+  it("keeps 1-D and 2-D observations in separate cells", async () => {
+    const musicId = newId();
+
+    // Same song, same valence, different arousal — and one recorded before the
+    // grid existed at all.
+    await recordSessionEffect({ songIds: [musicId], moodBefore: 2, moodAfter: 4 });
+    await recordSessionEffect({
+      songIds: [musicId],
+      moodBefore: 2,
+      moodAfter: 4,
+      arousalBefore: 5,
+    });
+
+    const cells = await SongEffect.find({ musicId });
+
+    // "Helps people at mood 2" and "helps agitated people at mood 2" are
+    // different claims; averaging them would destroy the distinction.
+    expect(cells).toHaveLength(2);
+    expect(cells.map((cell) => cell.startingArousal).sort()).toEqual([5, null]);
+  });
+
+  it("still answers a one-dimensional question across every arousal", async () => {
+    const musicId = newId();
+    for (const arousalBefore of [null, 2, 5]) {
+      for (let i = 0; i < 6; i += 1) {
+        await recordSessionEffect({
+          songIds: [musicId],
+          moodBefore: 2,
+          moodAfter: 4,
+          arousalBefore,
+        });
+      }
+    }
+
+    // No arousal given: an existing caller gets what it always got.
+    const anyArousal = await rankByMeasuredEffect(2);
+    expect(anyArousal.length).toBeGreaterThan(0);
+
+    // Asked precisely, it narrows to listeners who started in that state.
+    const agitated = await rankByMeasuredEffect(2, { startingArousal: 5 });
+    expect(agitated[0].observations).toBe(6);
+  });
+
+  it("records the arousal delta a one-dimensional scale cannot express", async () => {
+    const outcome = await SessionOutcome.create({
+      userId: newId(),
+      sessionId: newId(),
+      moodBefore: 2,
+      moodAfter: 4,
+      arousalBefore: 5,
+      arousalAfter: 2,
+    });
+
+    // "Wind me down" and "pick me up" both raise valence and move arousal in
+    // opposite directions — which is the whole reason for the second axis.
+    expect(outcome.delta).toBe(2);
+    expect(outcome.arousalDelta).toBe(-3);
+  });
+
+  it("reports no arousal delta when the user only gave one axis", async () => {
+    const outcome = await SessionOutcome.create({
+      userId: newId(),
+      sessionId: newId(),
+      moodBefore: 2,
+      moodAfter: 4,
+    });
+
+    expect(outcome.arousalDelta).toBeNull();
   });
 });

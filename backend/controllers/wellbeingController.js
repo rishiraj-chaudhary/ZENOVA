@@ -21,6 +21,11 @@ import resolveRegion from "../utils/resolveRegion.js";
 import AppError from "../utils/AppError.js";
 import MusicResource from "../models/MusicResource.js";
 import {
+  deletePlan,
+  getPlan,
+  savePlan,
+} from "../services/safetyPlanService.js";
+import {
   MIN_OBSERVATIONS,
   PROVISIONAL_OBSERVATIONS,
   getLedgerCoverage,
@@ -28,12 +33,13 @@ import {
 } from "../services/songEffectService.js";
 
 export const logMood = asyncHandler(async (req, res) => {
-  const { mood, intensity, context } = req.body;
+  const { mood, intensity, context, arousal } = req.body;
 
   const entry = await recordMood({
     userId: req.user._id,
     mood,
     intensity,
+    arousal,
     context,
     source: "check-in",
   });
@@ -153,13 +159,14 @@ export const clearSongFeedback = asyncHandler(async (req, res) => {
 });
 
 export const beginListeningSession = asyncHandler(async (req, res) => {
-  const { sessionId, moodBefore } = req.body;
+  const { sessionId, moodBefore, arousalBefore } = req.body;
 
   res.status(201).json(
     await startSession({
       userId: req.user._id,
       sessionId,
       moodBefore,
+      arousalBefore,
       timeZone: req.user.timeZone,
     })
   );
@@ -176,16 +183,34 @@ export const recordSessionListened = asyncHandler(async (req, res) => {
 });
 
 export const finishListeningSession = asyncHandler(async (req, res) => {
-  const { sessionId, moodAfter } = req.body;
+  const { sessionId, moodAfter, arousalAfter } = req.body;
 
   res.json(
     await completeSession({
       userId: req.user._id,
       sessionId,
       moodAfter,
+      arousalAfter,
       socketManager: req.socketManager,
     })
   );
+});
+
+/** Public: support contacts must be reachable without an account. */
+/**
+ * The plan the user wrote. Only ever readable by its author.
+ */
+export const getSafetyPlan = asyncHandler(async (req, res) => {
+  res.json({ plan: await getPlan(req.user._id) });
+});
+
+export const saveSafetyPlan = asyncHandler(async (req, res) => {
+  res.json({ plan: await savePlan(req.user._id, req.body) });
+});
+
+export const removeSafetyPlan = asyncHandler(async (req, res) => {
+  await deletePlan(req.user._id);
+  res.json({ deleted: true });
 });
 
 /** Public: support contacts must be reachable without an account. */

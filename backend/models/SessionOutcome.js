@@ -33,6 +33,10 @@ const sessionOutcomeSchema = new mongoose.Schema(
     moodBefore: { type: Number, min: 1, max: 5, required: true },
     moodAfter: { type: Number, min: 1, max: 5 },
 
+    /** The 2-D reading, where the user gave one. See MoodEntry.valence. */
+    arousalBefore: { type: Number, min: 1, max: 5, default: null },
+    arousalAfter: { type: Number, min: 1, max: 5, default: null },
+
     detectedMood: { type: String },
     songsPlayed: [{ type: mongoose.Schema.Types.ObjectId, ref: "MusicResource" }],
 
@@ -67,6 +71,16 @@ const sessionOutcomeSchema = new mongoose.Schema(
 sessionOutcomeSchema.virtual("delta").get(function computeDelta() {
   if (this.moodAfter == null) return null;
   return this.moodAfter - this.moodBefore;
+});
+
+/**
+ * Movement along the arousal axis, which is what most requests are actually
+ * about: "wind me down" and "pick me up" both raise valence and move arousal in
+ * opposite directions.
+ */
+sessionOutcomeSchema.virtual("arousalDelta").get(function computeArousalDelta() {
+  if (this.arousalAfter == null || this.arousalBefore == null) return null;
+  return this.arousalAfter - this.arousalBefore;
 });
 
 sessionOutcomeSchema.set("toJSON", { virtuals: true });

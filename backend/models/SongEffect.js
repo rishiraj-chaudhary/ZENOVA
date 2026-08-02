@@ -21,7 +21,17 @@ const songEffectSchema = new mongoose.Schema(
     },
 
     /** Starting mood bucket (1–5). Effect is conditional on where you began. */
-    startingMood: { type: Number, min: 1, max: 5, required: true },
+    /**
+   * The arousal the listener started at, where they gave one.
+   *
+   * Null means the observation predates the 2-D scale, and those cells are kept
+   * separate rather than merged: a song measured to help "people at mood 2" is
+   * a different claim from one measured to help "people at mood 2 who were
+   * agitated", and averaging them would quietly destroy the distinction.
+   */
+  startingArousal: { type: Number, min: 1, max: 5, default: null },
+
+  startingMood: { type: Number, min: 1, max: 5, required: true },
 
     observations: { type: Number, default: 0 },
     sumDelta: { type: Number, default: 0 },
@@ -34,7 +44,10 @@ const songEffectSchema = new mongoose.Schema(
 );
 
 // One cell per (song, starting state); the unique index makes the upsert safe.
-songEffectSchema.index({ musicId: 1, startingMood: 1 }, { unique: true });
+songEffectSchema.index(
+  { musicId: 1, startingMood: 1, startingArousal: 1 },
+  { unique: true }
+);
 // Ranking reads scan by starting state and order by effect.
 songEffectSchema.index({ startingMood: 1, observations: -1 });
 

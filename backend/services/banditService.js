@@ -89,6 +89,11 @@ export const sampleRanking = (cells, { temperature = 0.4, limit = 5, random = Ma
     musicId: entry.cell.musicId,
     position,
     posteriorMean: Number(entry.mean.toFixed(4)),
+    // The observed average, kept under the name the prompt already reads. The
+    // posterior mean is the ranking quantity; the raw mean is what a human — or
+    // a model — should be told, because it is the thing that was measured.
+    meanDelta:
+      entry.observations > 0 ? entry.cell.sumDelta / entry.observations : 0,
     observations: entry.observations,
     propensity: Math.min(
       Math.max((wins.get(entry.cell.musicId.toString()) ?? 1) / PROPENSITY_SAMPLES, 0.001),

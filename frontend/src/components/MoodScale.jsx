@@ -7,11 +7,26 @@ export const MOOD_OPTIONS = [
   { value: 5, label: "Great", emoji: "😄" },
 ];
 
-const MoodScale = ({ value, onChange, name = "mood", disabled = false }) => (
+/**
+ * Native radios in a fieldset, which is what gives arrow-key navigation and
+ * group semantics for free. The wrapper also carried role="radiogroup", which
+ * sits inside the fieldset and announces the group a second time.
+ *
+ * The legend takes the actual question rather than a fixed one: "How are you
+ * feeling?" is wrong for the after-rating, and a screen reader user gets only
+ * the legend.
+ */
+const MoodScale = ({
+  value,
+  onChange,
+  name = "mood",
+  disabled = false,
+  legend = "How are you feeling?",
+}) => (
   <fieldset disabled={disabled} className="border-0 p-0">
-    <legend className="sr-only">How are you feeling?</legend>
+    <legend className="sr-only">{legend}</legend>
 
-    <div role="radiogroup" className="flex flex-wrap justify-center gap-2">
+    <div className="flex flex-wrap justify-center gap-2">
       {MOOD_OPTIONS.map((option) => {
         const selected = value === option.value;
 

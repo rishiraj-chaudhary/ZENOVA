@@ -1,7 +1,13 @@
 import apiClient from "./client.js";
 
-export const logMood = ({ mood, intensity, context }) =>
-  apiClient.post("/wellbeing/moods", { mood, intensity, context });
+/** Arousal is optional and omitted when absent, never sent as null. */
+export const logMood = ({ mood, intensity, context, arousal }) =>
+  apiClient.post("/wellbeing/moods", {
+    mood,
+    intensity,
+    ...(context ? { context } : {}),
+    ...(arousal ? { arousal } : {}),
+  });
 
 export const fetchMoodHistory = ({ page = 1, limit = 30 } = {}) =>
   apiClient.get("/wellbeing/moods", { params: { page, limit } });

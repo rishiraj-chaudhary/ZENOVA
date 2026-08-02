@@ -14,7 +14,13 @@ import { contextOf, liftOf, recordBaselineObservation } from "./baselineService.
  * Upserted on sessionId so a user re-recording their starting mood updates the
  * existing record rather than creating a competing one.
  */
-export const startSession = async ({ userId, sessionId, moodBefore, timeZone }) => {
+export const startSession = async ({
+  userId,
+  sessionId,
+  moodBefore,
+  arousalBefore = null,
+  timeZone,
+}) => {
   // moodBefore is self-reported health data. Enforced here rather than in the
   // UI so no caller can persist it by accident.
   if (!(await hasMoodConsent(userId))) {
@@ -43,6 +49,7 @@ export const startSession = async ({ userId, sessionId, moodBefore, timeZone }) 
       moodBefore,
       detectedMood: recommendation.detectedMood,
       songsPlayed: recommendation.recommendedMusic.map((entry) => entry.musicId),
+      arousalBefore,
       arm: impression?.arm ?? "policy",
       hourOfDay,
       dayOfWeek,
@@ -83,7 +90,13 @@ export const markSessionListened = async ({ userId, sessionId, socketManager }) 
  * Completing a session is also the only event that writes to the song-effect
  * ledger, which is what turns an individual rating into ranking evidence.
  */
-export const completeSession = async ({ userId, sessionId, moodAfter, socketManager }) => {
+export const completeSession = async ({
+  userId,
+  sessionId,
+  moodAfter,
+  arousalAfter = null,
+  socketManager,
+}) => {
   if (!(await hasMoodConsent(userId))) {
     throw AppError.forbidden(
       "Mood tracking consent is required to record how you are feeling"
@@ -92,7 +105,7 @@ export const completeSession = async ({ userId, sessionId, moodAfter, socketMana
 
   const outcome = await SessionOutcome.findOneAndUpdate(
     { sessionId, userId },
-    { moodAfter, completedAt: new Date() },
+    { moodAfter, arousalAfter, completedAt: new Date() },
     { new: true }
   );
 
@@ -102,6 +115,7 @@ export const completeSession = async ({ userId, sessionId, moodAfter, socketMana
     songIds: outcome.songsPlayed,
     moodBefore: outcome.moodBefore,
     moodAfter,
+    arousalBefore: outcome.arousalBefore ?? null,
   });
 
   // The causal half. A control-arm session is evidence about what the *day*

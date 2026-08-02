@@ -30,6 +30,22 @@ const moodEntrySchema = new mongoose.Schema(
     /** 1–5 self-reported intensity, only set by explicit check-ins. */
     intensity: { type: Number, min: 1, max: 5 },
 
+  /**
+   * The two-dimensional reading, added alongside the 1-5 scale rather than
+   * replacing it.
+   *
+   * A single axis cannot distinguish "I need to be calmer" from "I need more
+   * energy" — opposite prescriptions that produce identical input. Music maps
+   * onto arousal far more naturally than onto a single goodness axis, so this
+   * is the difference between a recommender that can act on the request and one
+   * that can only guess at it.
+   *
+   * `valence` mirrors intensity for anything recorded before the grid existed;
+   * `arousal` stays null there, and anything derived from it says so.
+   */
+  valence: { type: Number, min: 1, max: 5, default: null },
+  arousal: { type: Number, min: 1, max: 5, default: null },
+
     recordedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { logMood } from "../api/wellbeingAPI.js";
 import Modal from "./Modal.jsx";
-import MoodScale, { MOOD_OPTIONS } from "./MoodScale.jsx";
+import AffectGrid from "./AffectGrid.jsx";
+import { MOOD_OPTIONS } from "./MoodScale.jsx";
 
 const STORAGE_KEY = "lastCheckInDate";
 const today = () => new Date().toISOString().slice(0, 10);
@@ -23,14 +24,17 @@ const DailyCheckIn = ({ open = true, onDone }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  const submit = async (value) => {
+  const submit = async ({ valence, arousal }) => {
     setSaving(true);
     setError(null);
 
     try {
       await logMood({
-        mood: MOOD_OPTIONS.find((option) => option.value === value).label.toLowerCase(),
-        intensity: value,
+        mood: MOOD_OPTIONS.find((option) => option.value === valence).label.toLowerCase(),
+        intensity: valence,
+        // Optional second axis. Sent only when given, so a partial reading is
+        // recorded rather than refused.
+        ...(arousal ? { arousal } : {}),
       });
       localStorage.setItem(STORAGE_KEY, today());
       onDone?.();
@@ -52,7 +56,7 @@ const DailyCheckIn = ({ open = true, onDone }) => {
         </p>
 
         <div className="mt-6">
-          <MoodScale value={null} onChange={submit} name="daily" disabled={saving} />
+          <AffectGrid onSubmit={submit} disabled={saving} submitLabel="Save check-in" />
         </div>
 
         {error && (
