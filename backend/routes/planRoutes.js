@@ -2,7 +2,9 @@ import express from "express";
 import { body, param } from "express-validator";
 import {
   attachSession,
+  begin,
   getCurrent,
+  getStepGuidance,
   getDirections,
   getReadout,
   pause,
@@ -37,6 +39,19 @@ router.post(
   [...planShape, body("reminderHour").optional(OPTIONAL).isInt({ min: 0, max: 23 })],
   validateRequest,
   start
+);
+
+router.get("/steps/:stepId/guidance", [param("stepId").isMongoId()], validateRequest, getStepGuidance);
+
+router.post(
+  "/steps/:stepId/begin",
+  [
+    param("stepId").isMongoId(),
+    body("moodBefore").isInt({ min: 1, max: 5 }),
+    body("arousalBefore").optional(OPTIONAL).isInt({ min: 1, max: 5 }),
+  ],
+  validateRequest,
+  begin
 );
 
 router.post(

@@ -1,3 +1,4 @@
+import ListeningEvent from "../../models/ListeningEvent.js";
 import MoodEntry from "../../models/MoodEntry.js";
 import PlanBehaviour from "../../models/PlanBehaviour.js";
 import PlanStep from "../../models/PlanStep.js";
@@ -24,7 +25,7 @@ export const MIN_TREND_SAMPLES = 4;
 export const computeBehaviour = async (plan) => {
   const now = new Date();
 
-  const [steps, outcomes, recentMoods] = await Promise.all([
+  const [steps, outcomes, recentMoods, plays] = await Promise.all([
     PlanStep.find({ planId: plan._id }).lean(),
     SessionOutcome.find({
       userId: plan.userId,
@@ -40,6 +41,11 @@ export const computeBehaviour = async (plan) => {
     })
       .select("valence intensity recordedAt")
       .sort({ recordedAt: 1 })
+      .lean(),
+    // Listening the plan had nothing to do with. Distinguishes someone who is
+    // disengaged from someone who is engaged elsewhere.
+    ListeningEvent.find({ userId: plan.userId, playedAt: { $gte: plan.startedAt } })
+      .select("hourOfDay")
       .lean(),
   ]);
 
@@ -108,6 +114,22 @@ export const computeBehaviour = async (plan) => {
         moodAfter: null,
       }),
       ratingsGiven: outcomes.length,
+    },
+
+    listening: {
+      playsSincePlanStarted: plays.length,
+      commonHour: (() => {
+        if (plays.length === 0) return null;
+
+        const counts = new Map();
+        for (const play of plays) {
+          if (!Number.isInteger(play.hourOfDay)) continue;
+          counts.set(play.hourOfDay, (counts.get(play.hourOfDay) ?? 0) + 1);
+        }
+
+        if (counts.size === 0) return null;
+        return [...counts.entries()].sort(([, a], [, b]) => b - a)[0][0];
+      })(),
     },
 
     effect: {

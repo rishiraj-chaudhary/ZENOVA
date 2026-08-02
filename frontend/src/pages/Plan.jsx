@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import ErrorBoundary from "../components/ErrorBoundary.jsx";
+import StepCard from "../components/plan/StepCard.jsx";
 import * as planAPI from "../api/planAPI.js";
 import usePlan from "../hooks/usePlan.js";
 
@@ -17,7 +17,8 @@ import usePlan from "../hooks/usePlan.js";
 const DURATION_LABELS = { 7: "1 week", 14: "2 weeks", 28: "4 weeks" };
 
 const Setup = ({ onStarted }) => {
-  const [directions, setDirections] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [analysis, setAnalysis] = useState(null);
   const [durations, setDurations] = useState([]);
   const [direction, setDirection] = useState(null);
   const [durationDays, setDurationDays] = useState(14);
@@ -29,8 +30,11 @@ const Setup = ({ onStarted }) => {
     planAPI
       .fetchDirections()
       .then((result) => {
-        setDirections(result.directions);
-        setDurations(result.durations);
+        setSuggestions(result.suggestions ?? []);
+        setAnalysis(result.analysis ?? null);
+        setDurations(result.durations ?? []);
+        // Pre-select what the data argues for; they can still pick anything.
+        if (result.suggestions?.[0]?.fromData) setDirection(result.suggestions[0].key);
       })
       .catch((loadError) => setError(loadError.message));
   }, []);
@@ -64,19 +68,36 @@ const Setup = ({ onStarted }) => {
         measured rather than guessed at.
       </p>
 
+      {/* What their own data says, before asking them to choose. A bare list of
+          four options asks the user to diagnose themselves. */}
+      {analysis?.enough && (
+        <p className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-300">
+          Looking at your last {analysis.samples} check-ins
+          {analysis.hardestBand ? `, your ${analysis.hardestBand}s stand out` : ""} — here&apos;s
+          what we&apos;d suggest, strongest first.
+        </p>
+      )}
+
+      {analysis && !analysis.enough && (
+        <p className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-400">
+          There aren&apos;t enough check-ins yet to suggest anything from your own
+          data, so pick whichever of these sounds closest.
+        </p>
+      )}
+
       <fieldset className="mt-8 border-0 p-0">
         <legend className="text-xs font-medium uppercase tracking-wider text-gray-500">
           What are you after
         </legend>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {directions.map((option) => (
+        <div className="mt-3 flex flex-col gap-2">
+          {suggestions.map((option) => (
             <label
               key={option.key}
-              className={`cursor-pointer rounded-2xl border px-4 py-3 text-sm transition-colors focus-within:ring-2 focus-within:ring-indigo-400 ${
+              className={`cursor-pointer rounded-2xl border px-4 py-3 transition-colors focus-within:ring-2 focus-within:ring-indigo-400 ${
                 direction === option.key
-                  ? "border-indigo-400 bg-indigo-500/20 text-white"
-                  : "border-white/10 bg-white/5 text-gray-200 hover:bg-white/10"
+                  ? "border-indigo-400 bg-indigo-500/20"
+                  : "border-white/10 bg-white/5 hover:bg-white/10"
               }`}
             >
               <input
@@ -87,7 +108,19 @@ const Setup = ({ onStarted }) => {
                 onChange={() => setDirection(option.key)}
                 className="sr-only"
               />
-              {option.label}
+
+              <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-white">
+                {option.label}
+                {option.fromData && (
+                  <span className="rounded border border-emerald-500/40 px-1.5 py-0.5 text-[0.6rem] uppercase tracking-wider text-emerald-300">
+                    from your data
+                  </span>
+                )}
+              </span>
+
+              {/* The reason is the part they read; the score is only a ranking
+                  device. */}
+              <span className="mt-1 block text-sm text-gray-400">{option.reason}</span>
             </label>
           ))}
         </div>
@@ -203,8 +236,7 @@ const StepDot = ({ step }) => {
   );
 };
 
-const Active = ({ plan, steps, nextStep, behaviour, onPause, onResume, onStop }) => {
-  const navigate = useNavigate();
+const Active = ({ plan, steps, nextStep, behaviour, onPause, onResume, onStop, onStepDone }) => {
   const [readout, setReadout] = useState(null);
 
   useEffect(() => {
@@ -265,21 +297,8 @@ const Active = ({ plan, steps, nextStep, behaviour, onPause, onResume, onStop })
       )}
 
       {nextStep && plan.status === "active" && (
-        <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5">
-          <p className="text-xs uppercase tracking-wider text-gray-500">Next up</p>
-          <p className="mt-1.5 text-sm text-gray-200">
-            {nextStep.kind === "check_in"
-              ? "A check-in — just how you're doing, nothing to listen to."
-              : "A session: rate how you feel, listen, rate again."}
-          </p>
-
-          <button
-            type="button"
-            onClick={() => navigate("/profile")}
-            className="mt-3 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
-          >
-            Start it
-          </button>
+        <div className="mt-6">
+          <StepCard step={nextStep} onDone={onStepDone} />
         </div>
       )}
 
@@ -329,8 +348,19 @@ const Active = ({ plan, steps, nextStep, behaviour, onPause, onResume, onStop })
 };
 
 const Plan = () => {
-  const { plan, steps, nextStep, behaviour, loading, error, start, pause, resume, stop } =
-    usePlan();
+  const {
+    plan,
+    steps,
+    nextStep,
+    behaviour,
+    loading,
+    error,
+    refresh,
+    start,
+    pause,
+    resume,
+    stop,
+  } = usePlan();
 
   if (loading) {
     return (
@@ -357,6 +387,7 @@ const Plan = () => {
           onPause={pause}
           onResume={resume}
           onStop={stop}
+          onStepDone={refresh}
         />
       ) : (
         <Setup onStarted={start} />

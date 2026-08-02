@@ -38,6 +38,19 @@ const planBehaviourSchema = new mongoose.Schema({
     ratingsGiven: { type: Number, default: 0 },
   },
 
+  /**
+   * What they listen to on their own, outside the plan.
+   *
+   * The difference between "not engaged" and "engaged, but not with this" — and
+   * they call for opposite responses. Someone listening plenty while skipping
+   * sessions does not need a smaller plan; they need one that asks at a moment
+   * they are already there.
+   */
+  listening: {
+    playsSincePlanStarted: { type: Number, default: 0 },
+    commonHour: { type: Number, default: null },
+  },
+
   /** Whether it worked, measured against the counterfactual baseline. */
   effect: {
     meanLift: { type: Number, default: null },

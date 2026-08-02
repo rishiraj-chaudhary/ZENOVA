@@ -30,8 +30,99 @@ const MIN_DETERIORATION_SAMPLES = 4;
 
 const MIN_GRADUATION_SAMPLES = 5;
 
+/** How far behind a checkpoint counts as off the route rather than just slow. */
+const OFF_COURSE_GAP = 0.4;
+const MIN_OFF_COURSE_SAMPLES = 3;
+
+/** Listening plenty on their own while ignoring the plan's sessions. */
+const ENGAGED_ELSEWHERE_PLAYS = 15;
+
 /** Never asks for more than the plan started with. */
 const MIN_STEPS_PER_WEEK = 2;
+
+/**
+ * The checkpoint the plan should have passed by now, and whether it did.
+ *
+ * Marks reached and missed as it goes, so the same checkpoint is not judged
+ * twice and the read-out can show which parts of the route went to plan.
+ */
+const checkRoute = (plan, behaviour) => {
+  const dayIndex = plan.startedAt
+    ? Math.floor((Date.now() - new Date(plan.startedAt).getTime()) / 86_400_000)
+    : 0;
+
+  const due = plan.milestones.filter(
+    (milestone) => milestone.dayIndex <= dayIndex && !milestone.reached && !milestone.missedAt
+  );
+
+  if (due.length === 0) return null;
+
+  const latest = due.at(-1);
+  const axis = latest.axis ?? "valence";
+
+  // Compared on the checkpoint's own axis. A wind-down plan is behind when
+  // arousal has not come down, which has nothing to do with valence.
+  const actual =
+    axis === "arousal"
+      ? behaviour.effect.meanArousalShift != null && plan.baseline?.arousal != null
+        ? plan.baseline.arousal + behaviour.effect.meanArousalShift
+        : null
+      : behaviour.trend.recentMean;
+
+  if (actual == null) return null;
+
+  const expected = latest.targetValue ?? latest.targetValence;
+  if (expected == null) return null;
+
+  // Lower is better on a downward arousal target, so the sign flips.
+  const wantsLower = axis === "arousal" && plan.baseline?.arousal != null &&
+    expected < plan.baseline.arousal;
+  const gap = wantsLower ? actual - expected : expected - actual;
+
+  if (gap <= 0) {
+    latest.reached = true;
+    latest.reachedAt = new Date();
+    return { milestone: latest, onCourse: true, gap };
+  }
+
+  latest.missedAt = new Date();
+  return { milestone: latest, onCourse: false, gap };
+};
+
+/**
+ * Changes the route rather than the destination.
+ *
+ * Being behind is not a reason to demand more — that is the mistake every
+ * step-count app makes. It is a reason to change what the remaining steps
+ * actually do: a different kind of session, drawn from a wider pool, at the
+ * time of day that has been working.
+ */
+const rerouteRemaining = async (plan, { therapeuticFunction }) => {
+  const upcoming = await PlanStep.find({
+    planId: plan._id,
+    kind: "session",
+    status: "pending",
+    dueAt: { $gt: new Date() },
+  });
+
+  for (const step of upcoming) {
+    step.prescription = {
+      therapeuticFunction,
+      targetArousalShift: step.prescription?.targetArousalShift ?? 0,
+    };
+    await step.save();
+  }
+
+  return upcoming.length;
+};
+
+/** What to try instead of whatever has not been working. */
+const NEXT_APPROACH = {
+  calm: "support",
+  energize: "motivate",
+  support: "calm",
+  motivate: "energize",
+};
 
 const alreadyFired = (plan, trigger, withinHours = 72) => {
   const cutoff = Date.now() - withinHours * 60 * 60 * 1000;
@@ -160,6 +251,72 @@ const RULES = [
         "keep going — neither is better than the other.",
       offerGraduation: true,
     }),
+  },
+
+  {
+    trigger: "off_course",
+    fires: (behaviour, plan) => {
+      if (plan.milestones.length === 0) return false;
+      if (behaviour.trend.samples < MIN_OFF_COURSE_SAMPLES) return false;
+
+      const route = checkRoute(plan, behaviour);
+      return Boolean(route && !route.onCourse && route.gap >= OFF_COURSE_GAP);
+    },
+    apply: async (plan, behaviour) => {
+      const current = plan.milestones.find((m) => m.missedAt)?.targetValence ?? null;
+      const currentFunction =
+        (await PlanStep.findOne({ planId: plan._id, kind: "session" }))?.prescription
+          ?.therapeuticFunction ?? "support";
+
+      const next = NEXT_APPROACH[currentFunction] ?? "support";
+      const changed = await rerouteRemaining(plan, { therapeuticFunction: next });
+
+      return {
+        evidence: {
+          expected: current,
+          actual: behaviour.trend.recentMean
+            ? Number(behaviour.trend.recentMean.toFixed(2))
+            : null,
+          samples: behaviour.trend.samples,
+          from: currentFunction,
+          to: next,
+        },
+        // Not "you are behind" — the plan changing course, which is the plan's
+        // job rather than the person's.
+        change:
+          "You're not quite where this was heading by now, so we've changed " +
+          `what the remaining sessions do rather than asking for more of them. ` +
+          `The next ${changed} are a different approach.`,
+        rerouted: changed,
+      };
+    },
+  },
+
+  {
+    trigger: "engaged_elsewhere",
+    fires: (behaviour) =>
+      behaviour.adherence.due >= 2 &&
+      behaviour.adherence.rate != null &&
+      behaviour.adherence.rate < 0.5 &&
+      (behaviour.listening?.playsSincePlanStarted ?? 0) >= ENGAGED_ELSEWHERE_PLAYS,
+    apply: async (plan, behaviour) => {
+      const hour = behaviour.listening?.commonHour;
+      if (hour != null) await moveSchedule(plan, hour);
+
+      return {
+        evidence: {
+          plays: behaviour.listening.playsSincePlanStarted,
+          adherence: Number(behaviour.adherence.rate.toFixed(2)),
+          movedTo: hour,
+        },
+        // They are listening plenty. The plan is asking at the wrong moment,
+        // not asking too much.
+        change:
+          hour != null
+            ? `You've been listening plenty — just not when the plan asked. We've moved it to around ${String(hour).padStart(2, "0")}:00, where you already are.`
+            : "You've been listening plenty, just not to the plan's sessions. We'll keep the plan light and fit around it.",
+      };
+    },
   },
 
   {

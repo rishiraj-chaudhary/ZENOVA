@@ -204,6 +204,54 @@ export const buildSteps = ({ plan, hour, startedAt }) => {
   return steps;
 };
 
+/**
+ * Checkpoints on the way to the objective.
+ *
+ * A straight line from baseline to target, sampled every few days. Not because
+ * progress is linear — it is not — but because a straight line is the honest
+ * default when you have no reason to expect any other shape, and its only job
+ * is to answer "are we still on a path that gets there".
+ */
+export const buildMilestones = ({ durationDays, baseline, target }) => {
+  /**
+   * Checkpoints go on whichever axis the direction actually aims at.
+   *
+   * Winding down targets arousal and leaves valence alone, so a valence-only
+   * milestone builder produced no route at all for it — and a plan with no
+   * checkpoints can never be found to be off course, only to have failed at the
+   * end. Which axis is in play is recorded, because the two are not comparable.
+   */
+  const axis =
+    target?.valence != null && baseline?.valence != null
+      ? "valence"
+      : target?.arousal != null && baseline?.arousal != null
+        ? "arousal"
+        : null;
+
+  if (!axis) return [];
+
+  const from = baseline[axis];
+  const to = target[axis];
+
+  const checkpoints = durationDays <= 7 ? 2 : durationDays <= 14 ? 3 : 4;
+  const gap = to - from;
+  const milestones = [];
+
+  for (let i = 1; i <= checkpoints; i += 1) {
+    const fraction = i / checkpoints;
+
+    milestones.push({
+      dayIndex: Math.round(durationDays * fraction) - 1,
+      axis,
+      targetValue: Number((from + gap * fraction).toFixed(2)),
+      // Kept for the valence case so nothing already written has to change.
+      targetValence: axis === "valence" ? Number((from + gap * fraction).toFixed(2)) : null,
+    });
+  }
+
+  return milestones;
+};
+
 /** What a plan would look like, without committing to it. */
 export const previewPlan = async (userId, { direction, durationDays }) => {
   if (!DIRECTIONS[direction]) throw AppError.badRequest("Unknown direction");
@@ -272,6 +320,11 @@ export const startPlan = async (userId, { direction, durationDays, reminderHour 
     baseline: preview.baseline,
     target: preview.target,
     reminderHour: reminderHour ?? preview.scheduleHour,
+    milestones: buildMilestones({
+      durationDays,
+      baseline: preview.baseline,
+      target: preview.target,
+    }),
     startedAt,
     endsAt,
   });

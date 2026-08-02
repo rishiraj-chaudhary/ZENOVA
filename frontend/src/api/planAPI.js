@@ -1,6 +1,18 @@
 import apiClient from "./client.js";
 
+/** Directions, ranked by what the user's own data suggests, with reasons. */
 export const fetchDirections = () => apiClient.get("/plans/directions");
+
+/** What a step actually asks for: the songs, the length, the point of it. */
+export const fetchStepGuidance = (stepId) =>
+  apiClient.get(`/plans/steps/${stepId}/guidance`);
+
+/** Turns a step into a live measured session, without leaving the page. */
+export const beginStep = ({ stepId, moodBefore, arousalBefore }) =>
+  apiClient.post(`/plans/steps/${stepId}/begin`, {
+    moodBefore,
+    ...(arousalBefore ? { arousalBefore } : {}),
+  });
 
 /** What a plan would look like, without committing to it. */
 export const previewPlan = ({ direction, durationDays }) =>

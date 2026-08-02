@@ -52,6 +52,10 @@ const adaptationSchema = new mongoose.Schema(
         "no_measured_effect",
         "deterioration",
         "rapid_improvement",
+        // Behind on the route to the objective, so the route changes.
+        "off_course",
+        // Doing their own listening but not the plan's sessions.
+        "engaged_elsewhere",
       ],
       required: true,
     },
@@ -111,6 +115,35 @@ const listeningPlanSchema = new mongoose.Schema({
 
   /** How many steps a week, which adaptation may lower but never raise. */
   stepsPerWeek: { type: Number, default: 4 },
+
+  /**
+   * Checkpoints between here and the objective.
+   *
+   * This is what makes the plan a route rather than a schedule. Without
+   * intermediate points there is nothing to be off-course *from* — you would
+   * only find out at the end. With them, every few days the plan can ask
+   * whether the objective is still reachable on the current path, and change
+   * the path if it is not.
+   */
+  milestones: {
+    type: [
+      {
+        dayIndex: { type: Number, required: true },
+
+        /** Which axis this checkpoint is on; the two are not comparable. */
+        axis: { type: String, enum: ["valence", "arousal"], default: "valence" },
+        targetValue: { type: Number, default: null },
+
+        /** The valence-only form, kept so existing plans still read. */
+        targetValence: { type: Number, default: null },
+        reached: { type: Boolean, default: false },
+        reachedAt: { type: Date, default: null },
+        /** Set when the plan passed this point without hitting it. */
+        missedAt: { type: Date, default: null },
+      },
+    ],
+    default: [],
+  },
 
   /** One notification a day at most, and it can be off without stopping the plan. */
   remindersEnabled: { type: Boolean, default: true },

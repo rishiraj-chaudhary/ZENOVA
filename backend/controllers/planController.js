@@ -11,18 +11,78 @@ import {
   startPlan,
 } from "../services/plans/planService.js";
 import { DIRECTIONS, DURATIONS } from "../models/ListeningPlan.js";
+import { beginStep, guidanceFor } from "../services/plans/planGuidance.js";
+import { suggestDirections } from "../services/plans/planSuggestions.js";
 import AppError from "../utils/AppError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 
-/** What plans are on offer, and what each one aims at. */
+/**
+ * What their own data suggests, ranked, with the numbers behind each.
+ *
+ * A bare list of four options asks the user to diagnose themselves. Everything
+ * here is derived from their check-ins and sessions, and anything the data
+ * cannot support says so rather than inventing a reason.
+ */
 export const getDirections = asyncHandler(async (req, res) => {
+  const { suggestions, analysis } = await suggestDirections(
+    req.user._id,
+    req.user.timeZone
+  );
+
   res.json({
     directions: Object.entries(DIRECTIONS).map(([key, spec]) => ({
       key,
       label: spec.label,
     })),
     durations: DURATIONS,
+    suggestions,
+    analysis,
   });
+});
+
+/** What today's step actually asks for — the songs, the length, the point. */
+export const getStepGuidance = asyncHandler(async (req, res) => {
+  const plan = await getActivePlan(req.user._id);
+  if (!plan) throw AppError.notFound("No plan is running");
+
+  const step =
+    (await PlanStep.findOne({ _id: req.params.stepId, userId: req.user._id }).lean()) ??
+    (await nextStep(plan._id));
+
+  if (!step) return res.json({ step: null, guidance: null });
+
+  const behaviour = await getBehaviour(plan._id);
+
+  res.json({
+    step,
+    guidance: await guidanceFor({
+      plan,
+      step,
+      startingMood: behaviour?.trend?.recentMean
+        ? Math.round(behaviour.trend.recentMean)
+        : plan.baseline?.valence
+          ? Math.round(plan.baseline.valence)
+          : 3,
+    }),
+  });
+});
+
+/**
+ * Turns a step into a live session without leaving the page.
+ *
+ * The plan used to hand people to the chat, which meant it had described the
+ * work and then made them go and organise it themselves.
+ */
+export const begin = asyncHandler(async (req, res) => {
+  res.json(
+    await beginStep({
+      userId: req.user._id,
+      stepId: req.params.stepId,
+      moodBefore: req.body.moodBefore,
+      arousalBefore: req.body.arousalBefore,
+      timeZone: req.user.timeZone,
+    })
+  );
 });
 
 /** What a plan would look like, before committing to anything. */

@@ -1,13 +1,16 @@
 import request from "supertest";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import ListeningPlan from "../../models/ListeningPlan.js";
+import ListeningEvent from "../../models/ListeningEvent.js";
 import MoodEntry from "../../models/MoodEntry.js";
 import PlanStep from "../../models/PlanStep.js";
 import SessionOutcome from "../../models/SessionOutcome.js";
 import User from "../../models/user.js";
 import { adaptPlan, THRESHOLDS } from "../../services/plans/planAdaptation.js";
 import { computeBehaviour, rollForwardMissedSteps } from "../../services/plans/planBehaviour.js";
+import { beginStep, guidanceFor } from "../../services/plans/planGuidance.js";
 import { buildReadout } from "../../services/plans/planReadout.js";
+import { suggestDirections } from "../../services/plans/planSuggestions.js";
 import {
   deriveTarget,
   previewPlan,
@@ -509,5 +512,274 @@ describe("a target has to actually be a target", () => {
     const target = deriveTarget("lift", await summariseHistory(user._id));
 
     expect(target.basis).toBe("personal_best_week");
+  });
+});
+
+describe("suggestions come from the user's own data", () => {
+  it("suggests winding down when evenings are the low point", async () => {
+    const user = await makeUser();
+
+    // Evenings clearly worse than the rest of the day, in their timezone.
+    const at = (hour, days) => {
+      const d = daysAgo(days);
+      // 21:00 IST is 15:30 UTC.
+      d.setUTCHours(hour, 30, 0, 0);
+      return d;
+    };
+
+    await seedMoods(user._id, [
+      [2, at(15, 5)], [2, at(15, 4)], [2, at(15, 3)], [2, at(15, 2)],
+      [4, at(5, 5)], [4, at(5, 4)], [4, at(5, 3)], [4, at(5, 2)],
+    ]);
+
+    const { suggestions, analysis } = await suggestDirections(user._id, "Asia/Kolkata");
+
+    expect(analysis.enough).toBe(true);
+    expect(suggestions[0].key).toBe("wind_down");
+    // The number, not a hunch — so the person can disagree with the evidence.
+    expect(suggestions[0].fromData).toBe(true);
+    expect(suggestions[0].reason).toMatch(/\d/);
+  });
+
+  it("suggests steadying things when the swing is the problem", async () => {
+    const user = await makeUser();
+    const noon = (days) => {
+      const d = daysAgo(days);
+      d.setUTCHours(8, 0, 0, 0);
+      return d;
+    };
+
+    // Same average, wildly different day to day.
+    await seedMoods(user._id, [
+      [1, noon(8)], [5, noon(7)], [1, noon(6)], [5, noon(5)],
+      [1, noon(4)], [5, noon(3)], [2, noon(2)], [4, noon(1)],
+    ]);
+
+    const { suggestions } = await suggestDirections(user._id, "Asia/Kolkata");
+    const steadier = suggestions.find((entry) => entry.key === "steadier");
+
+    expect(steadier.fromData).toBe(true);
+    expect(steadier.reason).toMatch(/swings/i);
+  });
+
+  it("offers every direction even when the data argues for one", async () => {
+    const user = await makeUser();
+    await seedMoods(user._id, Array.from({ length: 8 }, (_, i) => [2, daysAgo(i + 1)]));
+
+    const { suggestions } = await suggestDirections(user._id, "Asia/Kolkata");
+
+    // Ranked, never forced.
+    expect(suggestions).toHaveLength(4);
+  });
+
+  it("does not pretend to have analysed anything with no history", async () => {
+    const user = await makeUser();
+
+    const { suggestions, analysis } = await suggestDirections(user._id, "UTC");
+
+    expect(analysis.enough).toBe(false);
+    expect(suggestions.every((entry) => entry.fromData === false)).toBe(true);
+  });
+});
+
+describe("a step says what to do, and can be done from here", () => {
+  it("gives concrete instructions and real songs", async () => {
+    const user = await makeUser();
+    const plan = await startPlan(user._id, { direction: "wind_down", durationDays: 7 });
+    const step = await PlanStep.findOne({ planId: plan._id, kind: "session" });
+
+    const guidance = await guidanceFor({
+      plan: await ListeningPlan.findById(plan._id),
+      step,
+      startingMood: 2,
+    });
+
+    // Not "go and start a session somewhere else".
+    expect(guidance.minutes).toBeGreaterThan(0);
+    expect(guidance.howTo.length).toBeGreaterThan(0);
+    expect(guidance.purpose).toMatch(/\w/);
+  });
+
+  it("says a rest day is a rest day rather than inventing work", async () => {
+    const user = await makeUser();
+    const plan = await startPlan(user._id, { direction: "lift", durationDays: 14 });
+    const rest = await PlanStep.findOne({ planId: plan._id, kind: "rest" });
+
+    const guidance = await guidanceFor({
+      plan: await ListeningPlan.findById(plan._id),
+      step: rest,
+      startingMood: 3,
+    });
+
+    expect(guidance.kind).toBe("rest");
+    expect(guidance.songs).toEqual([]);
+  });
+
+  it("opens a real measured session from the step", async () => {
+    const user = await makeUser();
+    const plan = await startPlan(user._id, { direction: "lift", durationDays: 7 });
+    const step = await PlanStep.findOne({ planId: plan._id, kind: "session" });
+
+    const result = await beginStep({
+      userId: user._id,
+      stepId: step._id,
+      moodBefore: 2,
+      timeZone: "Asia/Kolkata",
+    });
+
+    expect(result.sessionId).toBeTruthy();
+
+    const outcome = await SessionOutcome.findOne({ sessionId: result.sessionId });
+    expect(outcome.moodBefore).toBe(2);
+    expect((await PlanStep.findById(step._id)).sessionId.toString()).toBe(
+      result.sessionId.toString()
+    );
+  });
+
+  it("refuses to start someone else's step", async () => {
+    const owner = await makeUser();
+    const stranger = await makeUser();
+    const plan = await startPlan(owner._id, { direction: "lift", durationDays: 7 });
+    const step = await PlanStep.findOne({ planId: plan._id, kind: "session" });
+
+    await expect(
+      beginStep({ userId: stranger._id, stepId: step._id, moodBefore: 3, timeZone: "UTC" })
+    ).rejects.toThrow(/not yours/i);
+  });
+
+  it("refuses to start a rest day", async () => {
+    const user = await makeUser();
+    const plan = await startPlan(user._id, { direction: "lift", durationDays: 14 });
+    const rest = await PlanStep.findOne({ planId: plan._id, kind: "rest" });
+
+    await expect(
+      beginStep({ userId: user._id, stepId: rest._id, moodBefore: 3, timeZone: "UTC" })
+    ).rejects.toThrow(/rest days/i);
+  });
+});
+
+describe("rerouting toward the objective", () => {
+  it("lays out checkpoints between the baseline and the target", async () => {
+    const user = await makeUser();
+    await seedMoods(user._id, [
+      [5, daysAgo(30)], [5, daysAgo(29)], [4, daysAgo(28)],
+      [2, daysAgo(2)], [2, daysAgo(1)], [2, new Date()], [2, new Date()], [2, new Date()],
+    ]);
+
+    const plan = await startPlan(user._id, { direction: "lift", durationDays: 28 });
+
+    // Without checkpoints there is nothing to be off-course from — you would
+    // only find out at the end.
+    expect(plan.milestones.length).toBeGreaterThan(2);
+    expect(plan.milestones.at(-1).targetValence).toBeCloseTo(plan.target.valence, 1);
+    expect(plan.milestones[0].targetValence).toBeLessThan(plan.target.valence);
+  });
+
+  it("changes what the remaining sessions do when behind, without asking for more", async () => {
+    const user = await makeUser();
+    await seedMoods(user._id, [
+      [4, daysAgo(40)], [4, daysAgo(39)], [4, daysAgo(38)],
+      [3, daysAgo(5)], [3, daysAgo(4)], [3, daysAgo(3)], [3, daysAgo(2)], [3, daysAgo(1)],
+    ]);
+
+    const plan = await ListeningPlan.findById(
+      (await startPlan(user._id, { direction: "lift", durationDays: 28 }))._id
+    );
+
+    /**
+     * Flat, not falling.
+     *
+     * Someone holding steady at where they started is behind a checkpoint that
+     * expected movement — but they are not deteriorating, and deterioration is
+     * terminal. Getting this wrong the first time was the rule doing its job.
+     */
+    plan.startedAt = daysAgo(10);
+    plan.baseline = { valence: 3, arousal: null, samples: 8 };
+    plan.milestones[0].dayIndex = 0;
+    plan.milestones[0].targetValence = 3.6;
+    await plan.save();
+
+    const before = plan.stepsPerWeek;
+    const beforeFn = (await PlanStep.findOne({ planId: plan._id, kind: "session" }))
+      .prescription.therapeuticFunction;
+
+    const { applied } = await adaptPlan(await ListeningPlan.findById(plan._id));
+    const after = await ListeningPlan.findById(plan._id);
+    const afterFn = (
+      await PlanStep.findOne({
+        planId: plan._id,
+        kind: "session",
+        status: "pending",
+        dueAt: { $gt: new Date() },
+      })
+    )?.prescription?.therapeuticFunction;
+
+    const offCourse = applied.find((entry) => entry.trigger === "off_course");
+
+    expect(offCourse).toBeTruthy();
+    // The invariant that matters: being behind changes what the sessions do,
+    // and never asks for more of them. Low adherence may legitimately also fire
+    // here and lower the count — what must never happen is it going up.
+    expect(after.stepsPerWeek).toBeLessThanOrEqual(before);
+    expect(afterFn).not.toBe(beforeFn);
+    expect(offCourse.rerouted).toBeGreaterThan(0);
+  });
+
+  it("moves to where they already are when they listen but skip the sessions", async () => {
+    const user = await makeUser();
+    const plan = await ListeningPlan.findById(
+      (await startPlan(user._id, { direction: "steadier", durationDays: 28 }))._id
+    );
+
+    const steps = await PlanStep.find({ planId: plan._id, kind: "session" }).limit(3);
+    for (const step of steps) {
+      step.dueAt = daysAgo(2);
+      step.status = "missed";
+      await step.save();
+    }
+
+    // Plenty of listening, all of it at 23:00, none of it the plan's — and
+    // since the plan started, or it says nothing about this plan.
+    for (let i = 0; i < 20; i += 1) {
+      await ListeningEvent.create({
+        userId: user._id,
+        spotifyTrackId: `t-${i}`,
+        playedAt: new Date(),
+        hourOfDay: 23,
+      });
+    }
+
+    const { applied } = await adaptPlan(await ListeningPlan.findById(plan._id));
+    const after = await ListeningPlan.findById(plan._id);
+
+    const engaged = applied.find((entry) => entry.trigger === "engaged_elsewhere");
+
+    // Engaged elsewhere is a different problem from disengaged, and calls for
+    // the opposite response.
+    expect(engaged).toBeTruthy();
+    expect(after.reminderHour).toBe(23);
+  });
+
+  it("still refuses to reroute anyone who is getting worse", async () => {
+    const user = await makeUser();
+    const plan = await ListeningPlan.findById(
+      (await startPlan(user._id, { direction: "lift", durationDays: 28 }))._id
+    );
+
+    plan.baseline = { valence: 4, arousal: 3, samples: 4 };
+    plan.startedAt = daysAgo(10);
+    plan.milestones = [{ dayIndex: 0, targetValence: 4.5 }];
+    await plan.save();
+
+    await seedMoods(user._id, [
+      [2, new Date()], [2, new Date()], [1, new Date()], [1, new Date()],
+    ]);
+
+    const { applied } = await adaptPlan(await ListeningPlan.findById(plan._id));
+
+    // Off-course would also fire here. Deterioration terminates first, because
+    // rerouting someone who is going downhill is still asking them to keep up.
+    expect(applied).toHaveLength(1);
+    expect(applied[0].trigger).toBe("deterioration");
   });
 });
